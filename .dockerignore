@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+.codex
+node_modules
+frontend
+tmp
+api
+*.test
+*.out
+.env
+.env.*
+docker-compose*.yml
+Dockerfile*

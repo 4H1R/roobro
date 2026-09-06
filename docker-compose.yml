@@ -1,0 +1,54 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: roobro-app:latest
+    ports:
+      - "${FORWARD_APP_PORT:-8080}:8080"
+    environment:
+      APP_ENV: development
+      PORT: 8080
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:3000}"
+      LIVEKIT_HOST: "http://livekit:7880"
+      LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}"
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-devsecret}"
+      # Air compiles inside the running container, so it needs the same
+      # reachable module proxy used while building Dockerfile.dev.
+      GOPROXY: "${GOPROXY:-https://goproxy.cn,direct}"
+      GOSUMDB: "${GOSUMDB:-sum.golang.org}"
+      GOFLAGS: "-tags=nomsgpack -buildvcs=false"
+    volumes:
+      - ".:/app"
+      - "go-modules:/go/pkg/mod"
+      - "go-build-cache:/root/.cache/go-build"
+    working_dir: /app
+    depends_on:
+      livekit:
+        condition: service_started
+    networks:
+      - roobro
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0 --node-ip 127.0.0.1
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
+    ports:
+      - "${FORWARD_LIVEKIT_PORT:-7880}:7880"
+      - "${FORWARD_LIVEKIT_TCP_PORT:-7881}:7881"
+      - "${FORWARD_LIVEKIT_UDP_PORT:-7882}:7882/udp"
+    networks:
+      - roobro
+    restart: unless-stopped
+
+networks:
+  roobro:
+    driver: bridge
+
+volumes:
+  go-modules:
+    driver: local
+  go-build-cache:
+    driver: local

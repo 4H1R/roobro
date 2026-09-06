@@ -1,0 +1,14 @@
+{
+  "name": "roobro",
+  "private": true,
+  "homepage": "https://roobro.ir",
+  "workspaces": ["frontend"],
+  "scripts": {
+    "front:dev": "bun --filter @roobro/web dev",
+    "front:build": "bun --filter @roobro/web build",
+    "front:typecheck": "bun --filter @roobro/web typecheck",
+    "front:test": "bun --filter @roobro/web test",
+    "back:dev": "go run ./cmd/api",
+    "back:test": "go test ./..."
+  }
+}
