@@ -31,16 +31,38 @@ func NewClient(cfg *config.Config) *Client {
 func (c *Client) Configured() bool  { return c.roomClient != nil }
 func (c *Client) PublicURL() string { return c.publicURL }
 
-func (c *Client) CreateRoom(ctx context.Context, name string, maxParticipants uint32) error {
+func (c *Client) CreateRoom(ctx context.Context, name string, maxParticipants, emptyTimeout, departureTimeout uint32) error {
 	if !c.Configured() {
 		return nil
 	}
 	if maxParticipants == 0 {
 		maxParticipants = 100
 	}
-	_, err := c.roomClient.CreateRoom(ctx, &lk.CreateRoomRequest{Name: name, EmptyTimeout: 600, MaxParticipants: maxParticipants})
+	_, err := c.roomClient.CreateRoom(ctx, &lk.CreateRoomRequest{
+		Name:             name,
+		EmptyTimeout:     emptyTimeout,
+		DepartureTimeout: departureTimeout,
+		MaxParticipants:  maxParticipants,
+	})
 	if err != nil {
 		return fmt.Errorf("creating LiveKit room: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) DeleteRoom(ctx context.Context, name string) error {
+	if !c.Configured() {
+		return nil
+	}
+	rooms, err := c.roomClient.ListRooms(ctx, &lk.ListRoomsRequest{Names: []string{name}})
+	if err != nil {
+		return fmt.Errorf("finding LiveKit room: %w", err)
+	}
+	if len(rooms.Rooms) == 0 {
+		return nil
+	}
+	if _, err := c.roomClient.DeleteRoom(ctx, &lk.DeleteRoomRequest{Room: name}); err != nil {
+		return fmt.Errorf("deleting LiveKit room: %w", err)
 	}
 	return nil
 }

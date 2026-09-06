@@ -9,6 +9,7 @@ const isBuild = process.argv.includes("build")
 
 export default defineConfig({
   plugins: [tailwindcss(), isBuild && nitro({ preset: "bun" }), tanstackStart(), react()],
+  publicDir: path.resolve(__dirname, "./public"),
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: {
     host: true,

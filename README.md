@@ -1,11 +1,11 @@
-# roobro
+# رو به رو
 
 <p align="center">
-  <img src="frontend/public/logo.svg" alt="roobro" width="88" />
+  <img src="frontend/public/logo.svg" alt="رو به رو" width="88" />
 </p>
 
 <p align="center">
-  A Persian-first, bilingual video-meeting experience for teams that work in Persian and English.
+  A Persian video-meeting experience designed for natural, focused conversations.
 </p>
 
 <p align="center">
@@ -14,11 +14,11 @@
   <a href="#api">API</a>
 </p>
 
-![roobro meeting preview](frontend/public/og.png)
+![پیش‌نمایش جلسه رو به رو](frontend/public/og.png)
 
 ## About
 
-roobro makes it simple to create and join browser-based video meetings with a human-friendly share code. The interface is Persian and RTL by default, includes a complete English LTR experience, and keeps realtime credentials behind a Go API.
+رو به رو makes it simple to create and join browser-based video meetings with a human-friendly share code. The interface is Persian and RTL, and realtime credentials stay behind a Go API.
 
 The app can also run in an interactive demo mode, so the full meeting flow remains explorable when the API or LiveKit is not configured.
 
@@ -27,7 +27,7 @@ The app can also run in an interactive demo mode, so the full meeting flow remai
 - Create meetings and invite people with a short share code or link
 - Preview your camera and choose microphone/camera state before joining
 - Join realtime rooms powered by LiveKit
-- Switch between Persian RTL and English LTR with a persisted preference
+- Use a Persian RTL interface powered by i18next
 - Use in-room video, audio, screen sharing, chat, participant details, and host actions
 - Keep LiveKit token generation and host authorization on the server
 - Explore the product without infrastructure through the built-in demo fallback
@@ -91,6 +91,10 @@ cp .env.example .env
 | `LIVEKIT_API_SECRET` | LiveKit API secret | `devsecret` in Compose |
 
 Use a public `wss://` URL for `LIVEKIT_PUBLIC_URL` in production.
+For a self-hosted production server or LiveKit Cloud, configure a signed webhook to
+`https://<your-api-host>/api/v1/livekit/webhook`. The Compose development stack
+configures this automatically. The webhook keeps meeting status in sync when an
+empty LiveKit room closes after five minutes.
 
 ## API
 
@@ -102,6 +106,7 @@ The API is served under `/api/v1`:
 | `GET` | `/meetings/:code` | Get meeting details |
 | `POST` | `/meetings/:code/join` | Join and receive a LiveKit token |
 | `POST` | `/meetings/:code/end` | End a meeting as its host |
+| `POST` | `/livekit/webhook` | Receive signed LiveKit room lifecycle events |
 
 A health check is available at `GET /health`.
 

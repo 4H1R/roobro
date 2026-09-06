@@ -35,6 +35,18 @@ func (r *MemoryRepository) ByCode(_ context.Context, code string) (*domain.Meeti
 	return &copy, nil
 }
 
+func (r *MemoryRepository) ByLiveKitRoomName(_ context.Context, roomName string) (*domain.Meeting, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, meeting := range r.meetings {
+		if meeting.LiveKitRoomName == roomName {
+			copy := *meeting
+			return &copy, nil
+		}
+	}
+	return nil, domain.ErrMeetingNotFound
+}
+
 func (r *MemoryRepository) Update(_ context.Context, meeting *domain.Meeting) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

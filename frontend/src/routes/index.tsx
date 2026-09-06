@@ -1,22 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { ArrowUpRight, CalendarPlus, Captions, ChevronRight, Globe2, Keyboard, LockKeyhole, Mic, MonitorUp, Sparkles, Users, Video, VideoOff } from "lucide-react"
+import { ArrowUpRight, Github, Keyboard, LockKeyhole, Mic, MonitorUp, Sparkles, Users, Video, VideoOff } from "lucide-react"
+import { motion, useReducedMotion } from "motion/react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BrandMark } from "@/components/brand-mark"
-import { languages, type Language } from "@/i18n"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export const Route = createFileRoute("/")({ component: HomePage })
 
 function HomePage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const navigate = useNavigate()
-  const current = ((i18n.resolvedLanguage ?? i18n.language) as Language) in languages
-    ? ((i18n.resolvedLanguage ?? i18n.language) as Language)
-    : "fa"
+  const shouldReduceMotion = useReducedMotion()
   const [code, setCode] = useState("")
 
-  const switchLanguage = () => void i18n.changeLanguage(current === "en" ? "fa" : "en")
   const startMeeting = () => void navigate({ to: "/new" })
   const joinMeeting = () => {
     const room = code.trim().split("/").filter(Boolean).pop()
@@ -24,24 +22,24 @@ function HomePage() {
   }
 
   return (
-    <main className="site-shell">
-      <header className="topbar">
+    <motion.main className="site-shell" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.35 }}>
+      <motion.div className="ambient-shape ambient-shape-one" animate={shouldReduceMotion ? undefined : { x: [0, 14, 0], y: [0, -10, 0] }} transition={{ duration: 12, ease: "easeInOut", repeat: Infinity }} aria-hidden="true" />
+      <motion.div className="ambient-shape ambient-shape-two" animate={shouldReduceMotion ? undefined : { x: [0, -12, 0], y: [0, 12, 0] }} transition={{ duration: 14, ease: "easeInOut", repeat: Infinity }} aria-hidden="true" />
+      <motion.header className="topbar" initial={shouldReduceMotion ? false : { opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.45, ease: [0.22, 1, 0.36, 1] }}>
         <a className="brand" href="#" aria-label={t("brand.name")}>
           <span className="brand-mark"><BrandMark /></span>
           <span>{t("brand.name")}</span>
         </a>
         <nav className="nav-links" aria-label={t("nav.label")}>
-          <a href="#how">{t("nav.how")}</a>
-          <a href="#security">{t("nav.security")}</a>
-          <button className="language-button" onClick={switchLanguage} type="button">
-            <Globe2 aria-hidden="true" />
-            <span>{t("nav.language")}</span>
-          </button>
+          <ThemeToggle />
+          <a className="github-link" href="https://github.com/4H1R/roobro" target="_blank" rel="noreferrer" aria-label={t("nav.github")} title={t("nav.github")}>
+            <Github aria-hidden="true" />
+          </a>
         </nav>
-      </header>
+      </motion.header>
 
       <section className="hero">
-        <div className="hero-copy">
+        <motion.div className="hero-copy" initial={shouldReduceMotion ? false : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.52, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.22, 1, 0.36, 1] }}>
           <div className="eyebrow"><Sparkles aria-hidden="true" />{t("home.eyebrow")}</div>
           <h1>{t("home.title")}</h1>
           <p className="hero-lead">{t("home.body")}</p>
@@ -60,10 +58,12 @@ function HomePage() {
           </div>
 
           <p className="trust-line"><LockKeyhole aria-hidden="true" />{t("home.privacy")}</p>
-        </div>
+        </motion.div>
 
-        <div className="product-preview" aria-label={t("home.previewTitle")}>
+        <motion.div className="product-preview" initial={shouldReduceMotion ? false : { opacity: 0, x: 24, y: 10, scale: 0.97 }} animate={{ opacity: 1, x: 0, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.58, delay: shouldReduceMotion ? 0 : 0.14, ease: [0.22, 1, 0.36, 1] }} aria-label={t("home.previewTitle")}>
           <div className="preview-glow" />
+          <div className="preview-orbit preview-orbit-one" aria-hidden="true" />
+          <div className="preview-orbit preview-orbit-two" aria-hidden="true" />
           <div className="preview-window">
             <div className="preview-header">
               <div>
@@ -80,7 +80,6 @@ function HomePage() {
               <div className="participant"><div className="avatar avatar-b">{t("home.participants.arman").slice(0, 1)}</div><span className="name-chip"><i />{t("home.participants.arman")}</span></div>
               <div className="participant"><div className="avatar avatar-c">{t("home.participants.niloufar").slice(0, 1)}</div><span className="name-chip muted"><Mic />{t("home.participants.niloufar")}</span></div>
             </div>
-            <div className="caption-chip"><Captions />{t("home.caption")}</div>
             <div className="control-dock">
               <button aria-label={t("home.muteMicrophone")}><Mic /></button>
               <button aria-label={t("home.turnOffCamera")}><VideoOff /></button>
@@ -88,13 +87,8 @@ function HomePage() {
               <button className="end-call" aria-label={t("home.endCall")}><VideoOff /></button>
             </div>
           </div>
-        </div>
+        </motion.div>
       </section>
-
-      <section id="how" className="feature-strip">
-        <div><span><CalendarPlus /></span><strong>{t("home.featureOne")}</strong><ChevronRight /></div>
-        <div><span><Globe2 /></span><strong>{t("home.featureTwo")}</strong><ChevronRight /></div>
-      </section>
-    </main>
+    </motion.main>
   )
 }

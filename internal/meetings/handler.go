@@ -5,20 +5,31 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/livekit/protocol/auth"
+	"github.com/livekit/protocol/webhook"
 
 	"github.com/4H1R/roobro/internal/domain"
 	"github.com/4H1R/roobro/internal/platform/httpx"
 )
 
-type Handler struct{ service domain.MeetingService }
+type Handler struct {
+	service            domain.MeetingService
+	webhookKeyProvider auth.KeyProvider
+}
 
-func NewHandler(service domain.MeetingService) *Handler { return &Handler{service: service} }
+func NewHandler(service domain.MeetingService, liveKitAPIKey, liveKitAPISecret string) *Handler {
+	return &Handler{
+		service:            service,
+		webhookKeyProvider: auth.NewSimpleKeyProvider(liveKitAPIKey, liveKitAPISecret),
+	}
+}
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/meetings", h.create)
 	rg.GET("/meetings/:code", h.get)
 	rg.POST("/meetings/:code/join", h.join)
 	rg.POST("/meetings/:code/end", h.end)
+	rg.POST("/livekit/webhook", h.handleLiveKitWebhook)
 }
 
 func (h *Handler) create(c *gin.Context) {
@@ -65,6 +76,21 @@ func (h *Handler) end(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, http.StatusOK, result)
+}
+
+func (h *Handler) handleLiveKitWebhook(c *gin.Context) {
+	event, err := webhook.ReceiveWebhookEvent(c.Request, h.webhookKeyProvider)
+	if err != nil {
+		httpx.Error(c, http.StatusUnauthorized, "invalid_webhook", "The webhook signature is invalid.")
+		return
+	}
+	if event.Event == webhook.EventRoomFinished && event.Room != nil {
+		if err := h.service.HandleRoomFinished(c.Request.Context(), event.Room.Name); err != nil && !errors.Is(err, domain.ErrMeetingNotFound) {
+			respondError(c, err)
+			return
+		}
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func respondError(c *gin.Context, err error) {

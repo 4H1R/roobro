@@ -35,6 +35,11 @@ services:
     command: --dev --bind 0.0.0.0 --node-ip 127.0.0.1
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
+      LIVEKIT_CONFIG: |
+        webhook:
+          api_key: "${LIVEKIT_API_KEY:-devkey}"
+          urls:
+            - "http://app:8080/api/v1/livekit/webhook"
     ports:
       - "${FORWARD_LIVEKIT_PORT:-7880}:7880"
       - "${FORWARD_LIVEKIT_TCP_PORT:-7881}:7881"

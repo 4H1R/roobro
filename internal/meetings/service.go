@@ -19,6 +19,11 @@ type service struct {
 	now        func() time.Time
 }
 
+const (
+	roomMaxParticipants = uint32(100)
+	roomEmptyTimeout    = uint32(5 * 60)
+)
+
 func NewService(repository domain.MeetingRepository, livekit domain.LiveKitClient) domain.MeetingService {
 	return &service{repository: repository, livekit: livekit, now: time.Now}
 }
@@ -48,7 +53,7 @@ func (s *service) Join(ctx context.Context, code string, input domain.JoinMeetin
 	}
 
 	if meeting.Status == domain.MeetingCreated {
-		if err := s.livekit.CreateRoom(ctx, meeting.LiveKitRoomName, 100); err != nil {
+		if err := s.livekit.CreateRoom(ctx, meeting.LiveKitRoomName, roomMaxParticipants, roomEmptyTimeout, roomEmptyTimeout); err != nil {
 			return nil, fmt.Errorf("meetings service join: %w", err)
 		}
 		now := s.now().UTC()
@@ -83,13 +88,34 @@ func (s *service) End(ctx context.Context, code, hostToken string) (*domain.Meet
 	if meeting.Status == domain.MeetingEnded {
 		return meeting, nil
 	}
+	if err := s.livekit.DeleteRoom(ctx, meeting.LiveKitRoomName); err != nil {
+		return nil, fmt.Errorf("meetings service end room: %w", err)
+	}
+	if err := s.finish(ctx, meeting); err != nil {
+		return nil, err
+	}
+	return meeting, nil
+}
+
+func (s *service) HandleRoomFinished(ctx context.Context, roomName string) error {
+	meeting, err := s.repository.ByLiveKitRoomName(ctx, roomName)
+	if err != nil {
+		return err
+	}
+	if meeting.Status == domain.MeetingEnded {
+		return nil
+	}
+	return s.finish(ctx, meeting)
+}
+
+func (s *service) finish(ctx context.Context, meeting *domain.Meeting) error {
 	now := s.now().UTC()
 	meeting.Status = domain.MeetingEnded
 	meeting.EndedAt = &now
 	if err := s.repository.Update(ctx, meeting); err != nil {
-		return nil, fmt.Errorf("meetings service end: %w", err)
+		return fmt.Errorf("meetings service end: %w", err)
 	}
-	return meeting, nil
+	return nil
 }
 
 func normalizeCode(value string) string { return strings.ToLower(strings.TrimSpace(value)) }

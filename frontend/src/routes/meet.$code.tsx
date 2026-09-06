@@ -1,11 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { Check, Copy, Mic, MicOff, ShieldCheck, Video, VideoOff } from "lucide-react"
+import { motion, useReducedMotion } from "motion/react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandMark } from "@/components/brand-mark"
 import { MeetingRoom } from "@/components/meeting-room"
+import { useCopyFeedback } from "@/hooks/use-copy-feedback"
 import { endMeeting, getMeeting, joinMeeting, meetingStorageKey, type JoinResult, type Meeting } from "@/lib/api"
 
 export const Route = createFileRoute("/meet/$code")({ component: MeetingPage })
@@ -14,6 +16,7 @@ function MeetingPage() {
   const { code } = Route.useParams()
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const shouldReduceMotion = useReducedMotion()
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [meeting, setMeeting] = useState<Meeting | null>(null)
@@ -24,7 +27,7 @@ function MeetingPage() {
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [joining, setJoining] = useState(false)
   const [joinResult, setJoinResult] = useState<JoinResult | null>(null)
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyFeedback()
 
   useEffect(() => {
     const demoTitle = sessionStorage.getItem(`roobro:demo:${code}`)
@@ -43,10 +46,8 @@ function MeetingPage() {
   }, [state, cameraOn])
 
   const copyLink = async () => {
-    await navigator.clipboard.writeText(location.href)
-    setCopied(true)
+    await copy(location.href)
     toast.success(t("lobby.copied"))
-    window.setTimeout(() => setCopied(false), 1600)
   }
 
   const join = async () => {
@@ -66,29 +67,39 @@ function MeetingPage() {
   }
 
   const leave = () => void navigate({ to: "/" })
+  const finished = () => setState("ended")
   const end = async () => {
     const hostToken = sessionStorage.getItem(meetingStorageKey(code))
-    if (hostToken && !code.startsWith("demo-")) await endMeeting(code, hostToken).catch(() => undefined)
-    void navigate({ to: "/" })
+    if (code.startsWith("demo-")) {
+      finished()
+      return
+    }
+    if (!hostToken) return
+    try {
+      await endMeeting(code, hostToken)
+      finished()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("room.endFailed"))
+    }
   }
 
-  if (state === "room" && joinResult) return <MeetingRoom result={joinResult} displayName={name} code={code} cameraOn={cameraOn} micOn={micOn} onLeave={leave} onEnd={end} />
-  if (state === "loading") return <main className="status-page"><div className="loading-mark"><BrandMark /></div><p>{t("lobby.checking")}</p></main>
-  if (state === "missing" || state === "ended") return <main className="status-page"><div className="status-icon"><VideoOff /></div><h1>{state === "ended" ? t("lobby.ended") : t("lobby.notFound")}</h1><Link to="/">{t("lobby.goHome")}</Link></main>
+  if (state === "room" && joinResult) return <MeetingRoom result={joinResult} displayName={name} code={code} cameraOn={cameraOn} micOn={micOn} onLeave={leave} onEnd={end} onFinished={finished} />
+  if (state === "loading") return <motion.main className="status-page" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}><motion.div className="loading-mark" animate={shouldReduceMotion ? undefined : { y: [0, -6, 0], scale: [1, 1.03, 1] }} transition={{ duration: 1.8, ease: "easeInOut", repeat: Infinity }}><BrandMark /></motion.div><p>{t("lobby.checking")}</p></motion.main>
+  if (state === "missing" || state === "ended") return <motion.main className="status-page" initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}><motion.div className="status-icon" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.36, delay: shouldReduceMotion ? 0 : 0.08 }}><VideoOff /></motion.div><h1>{state === "ended" ? t("lobby.ended") : t("lobby.notFound")}</h1>{state === "ended" && <p>{t("lobby.endedBody")}</p>}<Link to="/">{t("lobby.goHome")}</Link></motion.main>
 
   return (
-    <main className="lobby-page">
-      <header className="lobby-header"><Link to="/" className="brand"><span className="brand-mark"><BrandMark /></span><span>{t("brand.name")}</span></Link><span>{t("lobby.brand")}</span></header>
+    <motion.main className="lobby-page" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.3 }}>
+      <motion.header className="lobby-header" initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}><Link to="/" className="brand"><span className="brand-mark"><BrandMark /></span><span>{t("brand.name")}</span></Link><span>{t("lobby.brand")}</span></motion.header>
       <section className="lobby-layout">
-        <div className="camera-preview">
+        <motion.div className="camera-preview" initial={shouldReduceMotion ? false : { opacity: 0, x: -18, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.48, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.22, 1, 0.36, 1] }}>
           {cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <div className="camera-placeholder"><span>{name.trim().slice(0,1).toUpperCase() || "r"}</span></div>}
           <div className="preview-title"><strong>{meeting?.title}</strong><code dir="ltr">{code}</code></div>
           <div className="preview-toggles">
             <button className={!micOn ? "off" : ""} onClick={() => setMicOn(!micOn)} title={micOn ? t("lobby.micOn") : t("lobby.micOff")}>{micOn ? <Mic /> : <MicOff />}</button>
             <button className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} title={cameraOn ? t("lobby.cameraOn") : t("lobby.cameraOff")}>{cameraOn ? <Video /> : <VideoOff />}</button>
           </div>
-        </div>
-        <div className="join-card">
+        </motion.div>
+        <motion.div className="join-card" initial={shouldReduceMotion ? false : { opacity: 0, x: 18, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.48, delay: shouldReduceMotion ? 0 : 0.14, ease: [0.22, 1, 0.36, 1] }}>
           <div className="guest-chip"><ShieldCheck />{t("lobby.guest")}</div>
           <h1>{t("lobby.ready")}</h1>
           <p>{meeting?.title}</p>
@@ -96,10 +107,10 @@ function MeetingPage() {
           <input id="display-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void join()} placeholder={t("lobby.namePlaceholder")} />
           {permissionDenied && <span className="permission-note">{t("lobby.permission")}</span>}
           <button className="join-now" disabled={joining || name.trim().length < 2} onClick={join}>{joining ? t("lobby.joining") : t("lobby.join")}</button>
-          <button className="copy-link" onClick={copyLink}>{copied ? <Check /> : <Copy />}{t(copied ? "lobby.copied" : "lobby.copy")}</button>
+          <button className="copy-link" onClick={copyLink} aria-live="polite">{copied ? <Check /> : <Copy />}{t(copied ? "common.copied" : "lobby.copy")}</button>
           <div className="safe-note"><ShieldCheck />{t("lobby.safe")}</div>
-        </div>
+        </motion.div>
       </section>
-    </main>
+    </motion.main>
   )
 }

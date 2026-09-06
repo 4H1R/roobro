@@ -57,6 +57,7 @@ type JoinMeetingResponse struct {
 type MeetingRepository interface {
 	Create(context.Context, *Meeting) error
 	ByCode(context.Context, string) (*Meeting, error)
+	ByLiveKitRoomName(context.Context, string) (*Meeting, error)
 	Update(context.Context, *Meeting) error
 }
 
@@ -65,10 +66,12 @@ type MeetingService interface {
 	Get(context.Context, string) (*Meeting, error)
 	Join(context.Context, string, JoinMeetingDTO, string) (*JoinMeetingResponse, error)
 	End(context.Context, string, string) (*Meeting, error)
+	HandleRoomFinished(context.Context, string) error
 }
 
 type LiveKitClient interface {
-	CreateRoom(context.Context, string, uint32) error
+	CreateRoom(context.Context, string, uint32, uint32, uint32) error
+	DeleteRoom(context.Context, string) error
 	GenerateToken(roomName, identity, name string, host bool) (string, error)
 	PublicURL() string
 	Configured() bool

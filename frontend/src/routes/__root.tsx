@@ -5,39 +5,42 @@ import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { Toaster } from "sonner"
 
+import { ThemeProvider } from "@/components/theme-toggle"
 import { languages, type Language } from "@/i18n"
 
 import "@/i18n"
 import "@/styles.css"
 
 const SITE_URL = "https://roobro.ir"
-const TITLE = "roobro — تماس تصویری روان و طبیعی"
-const DESCRIPTION = "تجربه‌ای ساده و متمرکز برای جلسه‌های تصویری فارسی و انگلیسی."
+const TITLE = "رو به رو — تماس تصویری روان و طبیعی"
+const DESCRIPTION = "تجربه‌ای ساده و متمرکز برای جلسه‌های تصویری فارسی."
 
 export const Route = createRootRoute({
-  // The app language is a device-local preference detected from localStorage
-  // and the browser. Rendering route content on the server would always use
-  // Persian, then mismatch when an English-preferring client hydrates. Keep the document
-  // shell and metadata server-rendered, and render locale-aware UI on the client.
+  // Keep the document shell and metadata server-rendered while i18next owns app copy.
   ssr: false,
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: TITLE },
+      { name: "application-name", content: "رو به رو" },
       { name: "description", content: DESCRIPTION },
       { name: "theme-color", content: "#f7f8f4" },
       { property: "og:title", content: TITLE },
+      { property: "og:site_name", content: "رو به رو" },
       { property: "og:description", content: DESCRIPTION },
       { property: "og:type", content: "website" },
       { property: "og:url", content: SITE_URL },
       { property: "og:locale", content: "fa_IR" },
-      { property: "og:locale:alternate", content: "en_US" },
       { property: "og:image", content: `${SITE_URL}/og.png` },
+      { property: "og:image:alt", content: "رو به رو — تماس تصویری روان و طبیعی" },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:image", content: `${SITE_URL}/og.png` }
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESCRIPTION },
+      { name: "twitter:image", content: `${SITE_URL}/og.png` },
+      { name: "twitter:image:alt", content: "رو به رو — تماس تصویری روان و طبیعی" }
     ],
     links: [
       { rel: "canonical", href: SITE_URL },
@@ -63,12 +66,12 @@ function RootComponent() {
     document.documentElement.dir = languages[language].dir
   }, [language])
 
-  return <Outlet />
+  return <ThemeProvider><Outlet /></ThemeProvider>
 }
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="fa" dir="rtl" suppressHydrationWarning>
+    <html lang="fa" dir="rtl" data-theme="light" suppressHydrationWarning>
       <head><HeadContent /></head>
       <body>
         {children}

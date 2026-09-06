@@ -28,7 +28,7 @@ func main() {
 	repository := meetings.NewMemoryRepository()
 	livekitClient := lk.NewClient(cfg)
 	service := meetings.NewService(repository, livekitClient)
-	handler := meetings.NewHandler(service)
+	handler := meetings.NewHandler(service, cfg.LiveKitAPIKey, cfg.LiveKitSecret)
 
 	router := gin.New()
 	router.Use(gin.Recovery(), gin.Logger())
