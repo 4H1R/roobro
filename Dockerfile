@@ -3,7 +3,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache git
-ENV GOPROXY=https://goproxy.cn,direct \
+ENV GOPROXY=https://proxy.golang.org,direct \
     CGO_ENABLED=0 \
     GOFLAGS=-buildvcs=false
 
