@@ -1,7 +1,8 @@
 EXEC := docker compose exec -T app
 EXEC_TTY := docker compose exec app
+PROD := docker compose --env-file .env.prod -f docker-compose.prod.yml
 
-.PHONY: install up down build restart ps logs frontend backend livekit test front-build shell
+.PHONY: install up down build restart ps logs frontend backend livekit test front-build shell prod prod-up prod-pull prod-deploy prod-down prod-logs prod-ps
 
 install:
 	bun install
@@ -44,3 +45,23 @@ front-build:
 
 shell:
 	$(EXEC_TTY) sh
+
+prod: prod-up
+
+prod-up:
+	$(PROD) up -d
+
+prod-pull:
+	$(PROD) pull
+
+prod-deploy: prod-pull
+	$(PROD) up -d
+
+prod-down:
+	$(PROD) down
+
+prod-logs:
+	$(PROD) logs -f
+
+prod-ps:
+	$(PROD) ps

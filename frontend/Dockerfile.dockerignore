@@ -1,0 +1,12 @@
+*
+
+!package.json
+!bun.lock
+!bunfig.toml
+!frontend
+
+frontend/node_modules
+frontend/dist
+frontend/.output
+frontend/.vinxi
+frontend/tmp

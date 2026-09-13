@@ -3,7 +3,9 @@ package meetings
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -51,6 +53,13 @@ func (s *service) Join(ctx context.Context, code string, input domain.JoinMeetin
 	if meeting.Status == domain.MeetingEnded {
 		return nil, domain.ErrMeetingEnded
 	}
+	identity, err := participantIdentity(meeting.ID, input.ParticipantID)
+	if err != nil {
+		return nil, err
+	}
+	if participantIsBanned(meeting, identity) {
+		return nil, domain.ErrParticipantBanned
+	}
 
 	if meeting.Status == domain.MeetingCreated {
 		if err := s.livekit.CreateRoom(ctx, meeting.LiveKitRoomName, roomMaxParticipants, roomEmptyTimeout, roomEmptyTimeout); err != nil {
@@ -64,7 +73,6 @@ func (s *service) Join(ctx context.Context, code string, input domain.JoinMeetin
 		}
 	}
 
-	identity := "guest-" + uuid.NewString()
 	isHost := hostToken != "" && hostToken == meeting.HostToken
 	token, err := s.livekit.GenerateToken(meeting.LiveKitRoomName, identity, strings.TrimSpace(input.Name), isHost)
 	if err != nil {
@@ -75,6 +83,37 @@ func (s *service) Join(ctx context.Context, code string, input domain.JoinMeetin
 		role = "host"
 	}
 	return &domain.JoinMeetingResponse{Meeting: meeting, Token: token, ServerURL: s.livekit.PublicURL(), Role: role, Identity: identity, Demo: !s.livekit.Configured()}, nil
+}
+
+func (s *service) ModerateParticipant(ctx context.Context, code string, input domain.ModerateParticipantDTO, hostToken string) error {
+	meeting, err := s.Get(ctx, code)
+	if err != nil {
+		return err
+	}
+	if hostToken == "" || hostToken != meeting.HostToken {
+		return domain.ErrHostRequired
+	}
+	if meeting.Status == domain.MeetingEnded {
+		return domain.ErrMeetingEnded
+	}
+	identity, err := validateParticipantIdentity(input.Identity)
+	if err != nil {
+		return err
+	}
+	newlyBanned := input.Ban && !participantIsBanned(meeting, identity)
+	if newlyBanned {
+		meeting.BannedParticipantIdentities = append(meeting.BannedParticipantIdentities, identity)
+		if err := s.repository.Update(ctx, meeting); err != nil {
+			return fmt.Errorf("meetings service ban participant: %w", err)
+		}
+	}
+	if err := s.livekit.RemoveParticipant(ctx, meeting.LiveKitRoomName, identity); err != nil {
+		return fmt.Errorf("meetings service remove participant: %w", err)
+	}
+	if err := s.repository.RecordAnalyticsEvent(ctx, meeting.LiveKitRoomName, domain.MeetingAnalyticsEvent{Kind: domain.MeetingAnalyticsParticipantModerated, ParticipantIdentity: identity, Banned: newlyBanned}); err != nil {
+		return fmt.Errorf("meetings service record moderation analytics: %w", err)
+	}
+	return nil
 }
 
 func (s *service) End(ctx context.Context, code, hostToken string) (*domain.Meeting, error) {
@@ -94,7 +133,10 @@ func (s *service) End(ctx context.Context, code, hostToken string) (*domain.Meet
 	if err := s.finish(ctx, meeting); err != nil {
 		return nil, err
 	}
-	return meeting, nil
+	if err := s.repository.RecordAnalyticsEvent(ctx, meeting.LiveKitRoomName, domain.MeetingAnalyticsEvent{Kind: domain.MeetingAnalyticsRoomFinished}); err != nil {
+		return nil, fmt.Errorf("meetings service finish analytics: %w", err)
+	}
+	return s.Get(ctx, meeting.Code)
 }
 
 func (s *service) HandleRoomFinished(ctx context.Context, roomName string) error {
@@ -102,10 +144,22 @@ func (s *service) HandleRoomFinished(ctx context.Context, roomName string) error
 	if err != nil {
 		return err
 	}
-	if meeting.Status == domain.MeetingEnded {
-		return nil
+	if meeting.Status != domain.MeetingEnded {
+		if err := s.finish(ctx, meeting); err != nil {
+			return err
+		}
 	}
-	return s.finish(ctx, meeting)
+	if err := s.repository.RecordAnalyticsEvent(ctx, roomName, domain.MeetingAnalyticsEvent{Kind: domain.MeetingAnalyticsRoomFinished}); err != nil {
+		return fmt.Errorf("meetings service finish analytics: %w", err)
+	}
+	return nil
+}
+
+func (s *service) HandleAnalyticsEvent(ctx context.Context, roomName string, event domain.MeetingAnalyticsEvent) error {
+	if err := s.repository.RecordAnalyticsEvent(ctx, roomName, event); err != nil {
+		return fmt.Errorf("meetings service record analytics: %w", err)
+	}
+	return nil
 }
 
 func (s *service) finish(ctx context.Context, meeting *domain.Meeting) error {
@@ -119,6 +173,45 @@ func (s *service) finish(ctx context.Context, meeting *domain.Meeting) error {
 }
 
 func normalizeCode(value string) string { return strings.ToLower(strings.TrimSpace(value)) }
+
+func participantIdentity(meetingID, participantID string) (string, error) {
+	participantID = strings.TrimSpace(participantID)
+	if participantID == "" {
+		participantID = uuid.NewString()
+	}
+	if len(participantID) < 16 || len(participantID) > 128 {
+		return "", domain.ErrInvalidParticipant
+	}
+	for _, character := range participantID {
+		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '-' && character != '_' {
+			return "", domain.ErrInvalidParticipant
+		}
+	}
+	sum := sha256.Sum256([]byte(meetingID + "\x00" + participantID))
+	return "guest-" + hex.EncodeToString(sum[:]), nil
+}
+
+func validateParticipantIdentity(identity string) (string, error) {
+	identity = strings.TrimSpace(identity)
+	if !strings.HasPrefix(identity, "guest-") {
+		return "", domain.ErrInvalidParticipant
+	}
+	encoded := strings.TrimPrefix(identity, "guest-")
+	decoded, err := hex.DecodeString(encoded)
+	if err != nil || len(decoded) != sha256.Size {
+		return "", domain.ErrInvalidParticipant
+	}
+	return "guest-" + strings.ToLower(encoded), nil
+}
+
+func participantIsBanned(meeting *domain.Meeting, identity string) bool {
+	for _, bannedIdentity := range meeting.BannedParticipantIdentities {
+		if bannedIdentity == identity {
+			return true
+		}
+	}
+	return false
+}
 
 func shortCode() string {
 	const alphabet = "abcdefghjkmnpqrstuvwxyz23456789"

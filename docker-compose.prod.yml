@@ -1,0 +1,63 @@
+x-api-environment: &api-environment
+  APP_ENV: production
+  PORT: 8080
+  FRONTEND_URL: "https://${DOMAIN}"
+  LIVEKIT_HOST: "http://livekit:7880"
+  LIVEKIT_PUBLIC_URL: "wss://livekit.${DOMAIN}"
+  LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
+  LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
+
+services:
+  frontend:
+    image: "${REGISTRY:-ghcr.io/4h1r}/roobro-frontend:${IMAGE_TAG:-latest}"
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8081}:3000"
+    networks: [roobro]
+
+  api:
+    image: "${REGISTRY:-ghcr.io/4h1r}/roobro-backend:${IMAGE_TAG:-latest}"
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      <<: *api-environment
+    depends_on:
+      livekit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    networks: [roobro]
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: true
+        keys:
+          ${LIVEKIT_API_KEY}: "${LIVEKIT_API_SECRET}"
+        webhook:
+          api_key: ${LIVEKIT_API_KEY}
+          urls:
+            - http://api:8080/api/v1/livekit/webhook
+    ports:
+      - "127.0.0.1:${LIVEKIT_SIGNAL_PORT:-7880}:7880"
+      - "0.0.0.0:${LIVEKIT_TCP_PORT:-7881}:7881"
+      - "0.0.0.0:${LIVEKIT_UDP_PORT:-7882}:7882/udp"
+    networks: [roobro]
+
+networks:
+  roobro:
+    driver: bridge

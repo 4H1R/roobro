@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@livekit/components-react": "^2.9.24",
     "@livekit/components-styles": "^1.2.0",
     "@tailwindcss/vite": "^4.3.3",

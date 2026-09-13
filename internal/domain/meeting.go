@@ -7,9 +7,11 @@ import (
 )
 
 var (
-	ErrMeetingNotFound = errors.New("meeting not found")
-	ErrMeetingEnded    = errors.New("meeting has ended")
-	ErrHostRequired    = errors.New("host permission required")
+	ErrMeetingNotFound    = errors.New("meeting not found")
+	ErrMeetingEnded       = errors.New("meeting has ended")
+	ErrHostRequired       = errors.New("host permission required")
+	ErrParticipantBanned  = errors.New("participant is banned")
+	ErrInvalidParticipant = errors.New("invalid participant identity")
 )
 
 type MeetingStatus string
@@ -20,16 +22,50 @@ const (
 	MeetingEnded   MeetingStatus = "ended"
 )
 
+type MeetingAnalytics struct {
+	ParticipantJoins       int `json:"participant_joins"`
+	UniqueParticipants     int `json:"unique_participants"`
+	CurrentParticipants    int `json:"current_participants"`
+	PeakParticipants       int `json:"peak_participants"`
+	CameraActivations      int `json:"camera_activations"`
+	ScreenShareActivations int `json:"screen_share_activations"`
+	MicrophoneActivations  int `json:"microphone_activations"`
+	ParticipantsRemoved    int `json:"participants_removed"`
+	ParticipantsBanned     int `json:"participants_banned"`
+}
+
+type MeetingAnalyticsEventKind string
+
+const (
+	MeetingAnalyticsParticipantJoined    MeetingAnalyticsEventKind = "participant_joined"
+	MeetingAnalyticsParticipantLeft      MeetingAnalyticsEventKind = "participant_left"
+	MeetingAnalyticsCameraActivated      MeetingAnalyticsEventKind = "camera_activated"
+	MeetingAnalyticsScreenShareActivated MeetingAnalyticsEventKind = "screen_share_activated"
+	MeetingAnalyticsMicrophoneActivated  MeetingAnalyticsEventKind = "microphone_activated"
+	MeetingAnalyticsParticipantModerated MeetingAnalyticsEventKind = "participant_moderated"
+	MeetingAnalyticsRoomFinished         MeetingAnalyticsEventKind = "room_finished"
+)
+
+type MeetingAnalyticsEvent struct {
+	ID                  string
+	Kind                MeetingAnalyticsEventKind
+	ParticipantIdentity string
+	TrackID             string
+	Banned              bool
+}
+
 type Meeting struct {
-	ID              string        `json:"id"`
-	Code            string        `json:"code"`
-	Title           string        `json:"title"`
-	LiveKitRoomName string        `json:"-"`
-	Status          MeetingStatus `json:"status"`
-	HostToken       string        `json:"-"`
-	CreatedAt       time.Time     `json:"created_at"`
-	StartedAt       *time.Time    `json:"started_at,omitempty"`
-	EndedAt         *time.Time    `json:"ended_at,omitempty"`
+	ID                          string           `json:"id"`
+	Code                        string           `json:"code"`
+	Title                       string           `json:"title"`
+	LiveKitRoomName             string           `json:"-"`
+	Status                      MeetingStatus    `json:"status"`
+	HostToken                   string           `json:"-"`
+	CreatedAt                   time.Time        `json:"created_at"`
+	StartedAt                   *time.Time       `json:"started_at,omitempty"`
+	EndedAt                     *time.Time       `json:"ended_at,omitempty"`
+	Analytics                   MeetingAnalytics `json:"analytics"`
+	BannedParticipantIdentities []string         `json:"-"`
 }
 
 type CreateMeetingDTO struct {
@@ -37,7 +73,13 @@ type CreateMeetingDTO struct {
 }
 
 type JoinMeetingDTO struct {
-	Name string `json:"name" binding:"required,min=2,max=60"`
+	Name          string `json:"name" binding:"required,min=2,max=60"`
+	ParticipantID string `json:"participant_id"`
+}
+
+type ModerateParticipantDTO struct {
+	Identity string `json:"-"`
+	Ban      bool   `json:"ban"`
 }
 
 type CreateMeetingResponse struct {
@@ -59,19 +101,23 @@ type MeetingRepository interface {
 	ByCode(context.Context, string) (*Meeting, error)
 	ByLiveKitRoomName(context.Context, string) (*Meeting, error)
 	Update(context.Context, *Meeting) error
+	RecordAnalyticsEvent(context.Context, string, MeetingAnalyticsEvent) error
 }
 
 type MeetingService interface {
 	Create(context.Context, CreateMeetingDTO) (*CreateMeetingResponse, error)
 	Get(context.Context, string) (*Meeting, error)
 	Join(context.Context, string, JoinMeetingDTO, string) (*JoinMeetingResponse, error)
+	ModerateParticipant(context.Context, string, ModerateParticipantDTO, string) error
 	End(context.Context, string, string) (*Meeting, error)
 	HandleRoomFinished(context.Context, string) error
+	HandleAnalyticsEvent(context.Context, string, MeetingAnalyticsEvent) error
 }
 
 type LiveKitClient interface {
 	CreateRoom(context.Context, string, uint32, uint32, uint32) error
 	DeleteRoom(context.Context, string) error
+	RemoveParticipant(context.Context, string, string) error
 	GenerateToken(roomName, identity, name string, host bool) (string, error)
 	PublicURL() string
 	Configured() bool

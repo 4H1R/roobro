@@ -1,5 +1,8 @@
 .DS_Store
 .env
+.env.*
+!.env.example
+!.env.prod.example
 *.local
 node_modules/
 frontend/node_modules

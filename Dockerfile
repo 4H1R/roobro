@@ -18,7 +18,7 @@ RUN --mount=type=cache,id=roobro-gobuild,target=/root/.cache/go-build \
     go build -tags nomsgpack -ldflags="-w -s" -o /out/api ./cmd/api
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 app
+RUN apk add --no-cache ca-certificates tzdata wget && adduser -D -u 10001 app
 COPY --from=builder /out/api /usr/local/bin/api
 USER app
 EXPOSE 8080

@@ -1,3 +1,17 @@
+import FingerprintJS from "@fingerprintjs/fingerprintjs"
+
+export interface MeetingAnalytics {
+  participant_joins: number
+  unique_participants: number
+  current_participants: number
+  peak_participants: number
+  camera_activations: number
+  screen_share_activations: number
+  microphone_activations: number
+  participants_removed: number
+  participants_banned: number
+}
+
 export interface Meeting {
   id: string
   code: string
@@ -6,6 +20,7 @@ export interface Meeting {
   created_at: string
   started_at?: string
   ended_at?: string
+  analytics?: MeetingAnalytics
 }
 
 export interface JoinResult {
@@ -21,6 +36,28 @@ interface Envelope<T> {
   success: boolean
   data?: T
   error?: { code: string; message: string }
+}
+
+const participantIDStorageKey = "roobro:participant-id"
+let fingerprintAgent: ReturnType<typeof FingerprintJS.load> | null = null
+
+async function getParticipantID() {
+  let fallbackID: string = crypto.randomUUID()
+  try {
+    const stored = localStorage.getItem(participantIDStorageKey)
+    fallbackID = stored || fallbackID
+    if (!stored) localStorage.setItem(participantIDStorageKey, fallbackID)
+  } catch {
+    // Continue with the in-memory UUID when storage is unavailable.
+  }
+
+  try {
+    fingerprintAgent ??= FingerprintJS.load({ monitoring: false })
+    const agent = await fingerprintAgent
+    return (await agent.get()).visitorId
+  } catch {
+    return fallbackID
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -42,10 +79,19 @@ export async function getMeeting(code: string) {
 }
 
 export async function joinMeeting(code: string, name: string, hostToken?: string) {
+  const participantID = await getParticipantID()
   return request<JoinResult>(`/meetings/${encodeURIComponent(code)}/join`, {
     method: "POST",
     headers: hostToken ? { "X-Host-Token": hostToken } : undefined,
-    body: JSON.stringify({ name })
+    body: JSON.stringify({ name, participant_id: participantID })
+  })
+}
+
+export async function removeMeetingParticipant(code: string, identity: string, ban: boolean, hostToken: string) {
+  return request<{ removed: boolean; banned: boolean }>(`/meetings/${encodeURIComponent(code)}/participants/${encodeURIComponent(identity)}/remove`, {
+    method: "POST",
+    headers: { "X-Host-Token": hostToken },
+    body: JSON.stringify({ ban }),
   })
 }
 

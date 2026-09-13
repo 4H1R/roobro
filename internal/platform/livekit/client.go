@@ -67,6 +67,16 @@ func (c *Client) DeleteRoom(ctx context.Context, name string) error {
 	return nil
 }
 
+func (c *Client) RemoveParticipant(ctx context.Context, roomName, identity string) error {
+	if !c.Configured() {
+		return nil
+	}
+	if _, err := c.roomClient.RemoveParticipant(ctx, &lk.RoomParticipantIdentity{Room: roomName, Identity: identity, RevokeTokenTs: time.Now().Unix()}); err != nil {
+		return fmt.Errorf("removing LiveKit participant: %w", err)
+	}
+	return nil
+}
+
 func (c *Client) GenerateToken(roomName, identity, name string, host bool) (string, error) {
 	if !c.Configured() {
 		return "", nil

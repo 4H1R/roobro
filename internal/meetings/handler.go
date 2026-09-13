@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/livekit/protocol/auth"
+	lk "github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/webhook"
 
 	"github.com/4H1R/roobro/internal/domain"
@@ -28,6 +29,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/meetings", h.create)
 	rg.GET("/meetings/:code", h.get)
 	rg.POST("/meetings/:code/join", h.join)
+	rg.POST("/meetings/:code/participants/:identity/remove", h.moderateParticipant)
 	rg.POST("/meetings/:code/end", h.end)
 	rg.POST("/livekit/webhook", h.handleLiveKitWebhook)
 }
@@ -78,6 +80,20 @@ func (h *Handler) end(c *gin.Context) {
 	httpx.OK(c, http.StatusOK, result)
 }
 
+func (h *Handler) moderateParticipant(c *gin.Context) {
+	var input domain.ModerateParticipantDTO
+	if err := c.ShouldBindJSON(&input); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "validation_error", "Please provide a moderation action.")
+		return
+	}
+	input.Identity = c.Param("identity")
+	if err := h.service.ModerateParticipant(c.Request.Context(), c.Param("code"), input, c.GetHeader("X-Host-Token")); err != nil {
+		respondError(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, gin.H{"removed": true, "banned": input.Ban})
+}
+
 func (h *Handler) handleLiveKitWebhook(c *gin.Context) {
 	event, err := webhook.ReceiveWebhookEvent(c.Request, h.webhookKeyProvider)
 	if err != nil {
@@ -89,8 +105,52 @@ func (h *Handler) handleLiveKitWebhook(c *gin.Context) {
 			respondError(c, err)
 			return
 		}
+	} else if roomName, analyticsEvent, ok := analyticsEventFromWebhook(event); ok {
+		if err := h.service.HandleAnalyticsEvent(c.Request.Context(), roomName, analyticsEvent); err != nil && !errors.Is(err, domain.ErrMeetingNotFound) {
+			respondError(c, err)
+			return
+		}
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func analyticsEventFromWebhook(event *lk.WebhookEvent) (string, domain.MeetingAnalyticsEvent, bool) {
+	if event.Room == nil || event.Room.Name == "" {
+		return "", domain.MeetingAnalyticsEvent{}, false
+	}
+	analyticsEvent := domain.MeetingAnalyticsEvent{ID: event.Id}
+	switch event.Event {
+	case webhook.EventParticipantJoined:
+		if event.Participant == nil || event.Participant.Identity == "" {
+			return "", domain.MeetingAnalyticsEvent{}, false
+		}
+		analyticsEvent.Kind = domain.MeetingAnalyticsParticipantJoined
+		analyticsEvent.ParticipantIdentity = event.Participant.Identity
+	case webhook.EventParticipantLeft:
+		if event.Participant == nil || event.Participant.Identity == "" {
+			return "", domain.MeetingAnalyticsEvent{}, false
+		}
+		analyticsEvent.Kind = domain.MeetingAnalyticsParticipantLeft
+		analyticsEvent.ParticipantIdentity = event.Participant.Identity
+	case webhook.EventTrackPublished:
+		if event.Track == nil {
+			return "", domain.MeetingAnalyticsEvent{}, false
+		}
+		analyticsEvent.TrackID = event.Track.Sid
+		switch event.Track.Source {
+		case lk.TrackSource_CAMERA:
+			analyticsEvent.Kind = domain.MeetingAnalyticsCameraActivated
+		case lk.TrackSource_SCREEN_SHARE:
+			analyticsEvent.Kind = domain.MeetingAnalyticsScreenShareActivated
+		case lk.TrackSource_MICROPHONE:
+			analyticsEvent.Kind = domain.MeetingAnalyticsMicrophoneActivated
+		default:
+			return "", domain.MeetingAnalyticsEvent{}, false
+		}
+	default:
+		return "", domain.MeetingAnalyticsEvent{}, false
+	}
+	return event.Room.Name, analyticsEvent, true
 }
 
 func respondError(c *gin.Context, err error) {
@@ -101,6 +161,10 @@ func respondError(c *gin.Context, err error) {
 		httpx.Error(c, http.StatusGone, "meeting_ended", "This meeting has ended.")
 	case errors.Is(err, domain.ErrHostRequired):
 		httpx.Error(c, http.StatusForbidden, "host_required", "Only the host can do that.")
+	case errors.Is(err, domain.ErrParticipantBanned):
+		httpx.Error(c, http.StatusForbidden, "participant_banned", "You have been banned from this meeting.")
+	case errors.Is(err, domain.ErrInvalidParticipant):
+		httpx.Error(c, http.StatusBadRequest, "invalid_participant", "The participant identity is invalid.")
 	default:
 		httpx.Error(c, http.StatusInternalServerError, "internal_error", "Something went wrong.")
 	}

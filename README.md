@@ -110,6 +110,10 @@ The API is served under `/api/v1`:
 
 A health check is available at `GET /health`.
 
+Meeting responses include backend-maintained `analytics` counters for participant joins,
+unique/current/peak participants, camera, screen-share and microphone activations, and
+participant removals and bans. These counters contain no per-event timestamps or history.
+
 ## Development
 
 ```bash
@@ -119,6 +123,45 @@ make logs        # follow all container logs
 make ps          # inspect container status
 make restart     # restart the stack
 make down        # stop the stack
+```
+
+## Production
+
+Pushes to `main` build the API and frontend images and publish them to GitHub
+Container Registry as `ghcr.io/<repository-owner>/roobro-{backend,frontend}`.
+Each image receives both a short commit-SHA tag and `latest`; a manually
+dispatched workflow can publish an additional release tag. Publishing uses the
+built-in `GITHUB_TOKEN`, so no registry secret is required. Packages published
+from the public repository normally inherit public visibility and can be pulled
+anonymously; if repository permission inheritance is disabled in GitHub, mark
+both packages public after their first build.
+
+On a production host with Docker Compose and Caddy installed:
+
+```bash
+cp .env.prod.example .env.prod
+$EDITOR .env.prod
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+make prod-deploy
+```
+
+For a fork hosted on another domain, replace `roobro.ir` in `deploy/Caddyfile`
+and set the same hostname as `DOMAIN` in `.env.prod` before reloading Caddy.
+
+Set `IMAGE_TAG` to a commit SHA in `.env.prod` to deploy or roll back an exact
+build. The default `latest` follows `main`. The included Caddy config routes the
+site and `/api/*` over HTTPS and exposes LiveKit signaling at
+`livekit.<domain>`; TCP `7881` and UDP `7882` must also be allowed through the
+host firewall for WebRTC media.
+
+Useful production commands:
+
+```bash
+make prod-ps      # inspect service health
+make prod-logs    # follow production logs
+make prod-deploy  # pull the selected tag and recreate changed services
+make prod-down    # stop the production stack
 ```
 
 The current backend stores meeting metadata in memory to keep the first vertical slice small. Its repository interface is ready for a persistent implementation without changing the HTTP handlers or meeting service.
