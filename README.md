@@ -10,8 +10,10 @@
 
 <p align="center">
   <a href="https://roobro.ir">Website</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#api">API</a>
+  <a href="#local-development">Local development</a> ·
+  <a href="#docker-server-deployment">Deploy</a> ·
+  <a href="#api">API</a> ·
+  <a href="docs/deployment.md">Deployment guide</a>
 </p>
 
 ![پیش‌نمایش جلسه رو به رو](frontend/public/og.png)
@@ -37,14 +39,22 @@ The app can also run in an interactive demo mode, so the full meeting flow remai
 
 | Layer | Technology |
 | --- | --- |
-| Web app | React 19, TanStack Start, Vite, TypeScript |
+| Web app | React 19, TanStack Router, Vite, TypeScript |
 | Styling | Tailwind CSS 4, custom responsive CSS |
 | Localization | i18next, react-i18next |
 | Realtime media | LiveKit |
 | API | Go, Gin |
 | Development | Bun, Docker Compose, Make |
 
-## Quick start
+## How it works
+
+The frontend image serves the Vite-built React application. An internal Caddy
+gateway routes `/api/*` to the Go API and all other requests to that frontend
+container. The API creates meetings, authorizes hosts, and signs LiveKit access
+tokens; browsers then connect directly to LiveKit for signaling and media.
+LiveKit sends signed room-lifecycle webhooks back to the API.
+
+## Local development
 
 ### Prerequisites
 
@@ -55,6 +65,8 @@ The app can also run in an interactive demo mode, so the full meeting flow remai
 Install the application dependencies:
 
 ```bash
+git clone https://github.com/4H1R/roobro.git
+cd roobro
 make install
 ```
 
@@ -74,11 +86,16 @@ Open [http://localhost:3000](http://localhost:3000). Vite proxies `/api` to the 
 
 ## Configuration
 
-Development defaults are included in `docker-compose.yml`. For custom or deployed environments, copy the example file and replace the LiveKit credentials:
+Development defaults are built into `docker-compose.yml`. Copy `.env.example`
+to `.env` only when overriding local settings:
 
 ```bash
 cp .env.example .env
 ```
+
+Production uses `.env.prod`. The server installer generates it automatically;
+manual deployments start from `.env.prod.example` and are documented in the
+[deployment guide](docs/deployment.md).
 
 | Variable | Purpose | Development default |
 | --- | --- | --- |
@@ -91,10 +108,10 @@ cp .env.example .env
 | `LIVEKIT_API_SECRET` | LiveKit API secret | `devsecret` in Compose |
 
 Use a public `wss://` URL for `LIVEKIT_PUBLIC_URL` in production.
-For a self-hosted production server or LiveKit Cloud, configure a signed webhook to
-`https://<your-api-host>/api/v1/livekit/webhook`. The Compose development stack
-configures this automatically. The webhook keeps meeting status in sync when an
-empty LiveKit room closes after five minutes.
+The development and production Compose stacks automatically configure the
+self-hosted LiveKit webhook. When using LiveKit Cloud, configure a signed webhook
+to `https://<your-api-host>/api/v1/livekit/webhook`. The webhook keeps meeting
+status in sync when an empty LiveKit room closes after five minutes.
 
 ## API
 
@@ -102,11 +119,11 @@ The API is served under `/api/v1`:
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/meetings` | Create a meeting |
-| `GET` | `/meetings/:code` | Get meeting details |
-| `POST` | `/meetings/:code/join` | Join and receive a LiveKit token |
-| `POST` | `/meetings/:code/end` | End a meeting as its host |
-| `POST` | `/livekit/webhook` | Receive signed LiveKit room lifecycle events |
+| `POST` | `/api/v1/meetings` | Create a meeting |
+| `GET` | `/api/v1/meetings/:code` | Get meeting details |
+| `POST` | `/api/v1/meetings/:code/join` | Join and receive a LiveKit token |
+| `POST` | `/api/v1/meetings/:code/end` | End a meeting as its host |
+| `POST` | `/api/v1/livekit/webhook` | Receive signed LiveKit room lifecycle events |
 
 A health check is available at `GET /health`.
 
@@ -114,7 +131,7 @@ Meeting responses include backend-maintained `analytics` counters for participan
 unique/current/peak participants, camera, screen-share and microphone activations, and
 participant removals and bans. These counters contain no per-event timestamps or history.
 
-## Development
+## Common development commands
 
 ```bash
 make test        # backend tests, frontend type-check, and frontend tests
@@ -125,43 +142,45 @@ make restart     # restart the stack
 make down        # stop the stack
 ```
 
-## Production
+## Docker server deployment
 
-Pushes to `main` build the API and frontend images and publish them to GitHub
-Container Registry as `ghcr.io/<repository-owner>/roobro-{backend,frontend}`.
-Each image receives both a short commit-SHA tag and `latest`; a manually
-dispatched workflow can publish an additional release tag. Publishing uses the
-built-in `GITHUB_TOKEN`, so no registry secret is required. Packages published
-from the public repository normally inherit public visibility and can be pulled
-anonymously; if repository permission inheritance is disabled in GitHub, mark
-both packages public after their first build.
+On a publicly reachable Linux AMD64 or ARM64 server with Docker Compose v2, this
+one-liner downloads the deployment files, generates credentials, and starts the
+frontend, API, LiveKit, and their HTTP gateway.
 
-On a production host with Docker Compose and Caddy installed:
+This first stage is an HTTP smoke deployment. The containers will be ready, but
+remote camera and microphone access requires the DNS/TLS step in the deployment
+guide.
 
 ```bash
-cp .env.prod.example .env.prod
-$EDITOR .env.prod
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-make prod-deploy
+curl -fsSL https://raw.githubusercontent.com/4H1R/roobro/main/deploy/install.sh | sudo sh
 ```
 
-For a fork hosted on another domain, replace `roobro.ir` in `deploy/Caddyfile`
-and set the same hostname as `DOMAIN` in `.env.prod` before reloading Caddy.
+It installs under `/opt/roobro` and writes the generated settings to
+`/opt/roobro/.env.prod`. See the complete [deployment and environment
+guide](docs/deployment.md) for firewall ports, updates, rollbacks, every
+environment variable, and the optional domain/TLS step. Browsers require HTTPS
+to grant camera and microphone access; the IP-based HTTP deployment is intended
+to prepare and smoke-test the stack before DNS and TLS are attached.
 
-Set `IMAGE_TAG` to a commit SHA in `.env.prod` to deploy or roll back an exact
-build. The default `latest` follows `main`. The included Caddy config routes the
-site and `/api/*` over HTTPS and exposes LiveKit signaling at
-`livekit.<domain>`; TCP `7881` and UDP `7882` must also be allowed through the
-host firewall for WebRTC media.
+## Repository layout
 
-Useful production commands:
+| Path | Purpose |
+| --- | --- |
+| `cmd/api/` | Go API entry point |
+| `internal/` | Meeting domain, service, HTTP, and LiveKit integration |
+| `frontend/` | React/Vite application and frontend tests |
+| `deploy/` | Installer and Caddy configurations |
+| `docs/` | Operations and deployment documentation |
 
-```bash
-make prod-ps      # inspect service health
-make prod-logs    # follow production logs
-make prod-deploy  # pull the selected tag and recreate changed services
-make prod-down    # stop the production stack
-```
+## Current limitation
 
-The current backend stores meeting metadata in memory to keep the first vertical slice small. Its repository interface is ready for a persistent implementation without changing the HTTP handlers or meeting service.
+The backend stores meeting metadata in memory. Restarting the API clears active
+meeting metadata, and multiple API replicas do not share state yet. The repository
+interface is ready for a persistent implementation without changing handlers or
+the meeting service.
+
+## Contributing
+
+Issues and pull requests are welcome. Run `make test` and `make front-build`
+before submitting a change.

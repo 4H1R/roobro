@@ -49,13 +49,13 @@ shell:
 prod: prod-up
 
 prod-up:
-	$(PROD) up -d
+	$(PROD) up -d --wait --wait-timeout 120
 
 prod-pull:
 	$(PROD) pull
 
 prod-deploy: prod-pull
-	$(PROD) up -d
+	$(PROD) up -d --remove-orphans --wait --wait-timeout 120
 
 prod-down:
 	$(PROD) down
