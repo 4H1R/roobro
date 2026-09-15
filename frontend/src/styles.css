@@ -650,3 +650,19 @@ html[data-theme="light"] .meeting-room .lk-connection-quality[data-lk-quality="u
   .main-controls > .media-device-controls .device-menu-trigger { width: 19px; height: 36px; }
   .main-controls button.hangup { width: 50px; }
 }
+
+.chat-history-setting {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.chat-history-setting input { width: 1.1rem; height: 1.1rem; flex-shrink: 0; accent-color: var(--brand); }
+.chat-history-setting span { display: grid; gap: 0.35rem; }
+.chat-history-setting strong { font-size: 0.85rem; }
+.chat-history-setting small { font-size: 0.75rem; line-height: 1.7; color: var(--muted); }
+.chat-history-setting:has(input:disabled) { opacity: 0.6; cursor: wait; }
+.chat-error { padding: 0.75rem 1rem; color: #dc2626; font-size: 0.8rem; }
+.chat-form button:disabled { opacity: 0.5; cursor: default; }

@@ -29,6 +29,9 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/meetings", h.create)
 	rg.GET("/meetings/:code", h.get)
 	rg.POST("/meetings/:code/join", h.join)
+	rg.GET("/meetings/:code/chat", h.getChat)
+	rg.POST("/meetings/:code/chat", h.sendChat)
+	rg.PATCH("/meetings/:code/settings", h.setChatHistory)
 	rg.POST("/meetings/:code/participants/:identity/remove", h.moderateParticipant)
 	rg.POST("/meetings/:code/end", h.end)
 	rg.POST("/livekit/webhook", h.handleLiveKitWebhook)
@@ -155,6 +158,10 @@ func analyticsEventFromWebhook(event *lk.WebhookEvent) (string, domain.MeetingAn
 
 func respondError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, domain.ErrChatUnauthorized):
+		httpx.Error(c, http.StatusUnauthorized, "chat_session_required", "Join the meeting to access chat.")
+	case errors.Is(err, domain.ErrInvalidChatMessage):
+		httpx.Error(c, http.StatusBadRequest, "invalid_chat_message", "Messages must contain 1 to 2000 characters.")
 	case errors.Is(err, domain.ErrMeetingNotFound):
 		httpx.Error(c, http.StatusNotFound, "meeting_not_found", "This meeting does not exist.")
 	case errors.Is(err, domain.ErrMeetingEnded):
@@ -168,4 +175,43 @@ func respondError(c *gin.Context, err error) {
 	default:
 		httpx.Error(c, http.StatusInternalServerError, "internal_error", "Something went wrong.")
 	}
+}
+
+func (h *Handler) getChat(c *gin.Context) {
+	result, err := h.service.GetChat(c.Request.Context(), c.Param("code"), c.GetHeader("X-Chat-Token"))
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, result)
+}
+func (h *Handler) sendChat(c *gin.Context) {
+	var input struct {
+		Text string `json:"text" binding:"required,max=2000"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "validation_error", "Messages must contain 1 to 2000 characters.")
+		return
+	}
+	result, err := h.service.SendChat(c.Request.Context(), c.Param("code"), c.GetHeader("X-Chat-Token"), input.Text)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusCreated, result)
+}
+func (h *Handler) setChatHistory(c *gin.Context) {
+	var input struct {
+		Enabled *bool `json:"chat_history_enabled" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "validation_error", "Please provide the chat history setting.")
+		return
+	}
+	result, err := h.service.SetChatHistory(c.Request.Context(), c.Param("code"), *input.Enabled, c.GetHeader("X-Host-Token"))
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, result)
 }

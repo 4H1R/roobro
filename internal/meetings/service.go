@@ -34,7 +34,7 @@ func (s *service) Create(ctx context.Context, input domain.CreateMeetingDTO) (*d
 	id := uuid.NewString()
 	code := shortCode()
 	hostToken := secretToken()
-	meeting := &domain.Meeting{ID: id, Code: code, Title: strings.TrimSpace(input.Title), LiveKitRoomName: "roobro-" + id, Status: domain.MeetingCreated, HostToken: hostToken, CreatedAt: s.now().UTC()}
+	meeting := &domain.Meeting{ID: id, Code: code, Title: strings.TrimSpace(input.Title), LiveKitRoomName: "roobro-" + id, Status: domain.MeetingCreated, ChatHistoryEnabled: true, HostToken: hostToken, CreatedAt: s.now().UTC()}
 	if err := s.repository.Create(ctx, meeting); err != nil {
 		return nil, fmt.Errorf("meetings service create: %w", err)
 	}
@@ -82,7 +82,12 @@ func (s *service) Join(ctx context.Context, code string, input domain.JoinMeetin
 	if isHost {
 		role = "host"
 	}
-	return &domain.JoinMeetingResponse{Meeting: meeting, Token: token, ServerURL: s.livekit.PublicURL(), Role: role, Identity: identity, Demo: !s.livekit.Configured()}, nil
+	chatToken := secretToken()
+	chat, err := s.repository.OpenChatSession(ctx, meeting.Code, identity, strings.TrimSpace(input.Name), chatToken)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.JoinMeetingResponse{ChatToken: chatToken, Chat: chat, Meeting: meeting, Token: token, ServerURL: s.livekit.PublicURL(), Role: role, Identity: identity, Demo: !s.livekit.Configured()}, nil
 }
 
 func (s *service) ModerateParticipant(ctx context.Context, code string, input domain.ModerateParticipantDTO, hostToken string) error {
@@ -109,6 +114,9 @@ func (s *service) ModerateParticipant(ctx context.Context, code string, input do
 	}
 	if err := s.livekit.RemoveParticipant(ctx, meeting.LiveKitRoomName, identity); err != nil {
 		return fmt.Errorf("meetings service remove participant: %w", err)
+	}
+	if err := s.repository.RevokeChatSessions(ctx, meeting.Code, identity); err != nil {
+		return err
 	}
 	if err := s.repository.RecordAnalyticsEvent(ctx, meeting.LiveKitRoomName, domain.MeetingAnalyticsEvent{Kind: domain.MeetingAnalyticsParticipantModerated, ParticipantIdentity: identity, Banned: newlyBanned}); err != nil {
 		return fmt.Errorf("meetings service record moderation analytics: %w", err)
@@ -231,4 +239,25 @@ func secretToken() string {
 		return uuid.NewString()
 	}
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func (s *service) GetChat(ctx context.Context, code, token string) (domain.ChatState, error) {
+	return s.repository.GetChat(ctx, normalizeCode(code), token)
+}
+func (s *service) SendChat(ctx context.Context, code, token, text string) (domain.ChatMessage, error) {
+	text = strings.TrimSpace(text)
+	if text == "" || len([]rune(text)) > 2000 {
+		return domain.ChatMessage{}, domain.ErrInvalidChatMessage
+	}
+	return s.repository.SendChat(ctx, normalizeCode(code), token, text, s.now().UnixMilli())
+}
+func (s *service) SetChatHistory(ctx context.Context, code string, enabled bool, hostToken string) (*domain.Meeting, error) {
+	meeting, err := s.Get(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if hostToken == "" || hostToken != meeting.HostToken {
+		return nil, domain.ErrHostRequired
+	}
+	return s.repository.SetChatHistory(ctx, meeting.Code, enabled)
 }

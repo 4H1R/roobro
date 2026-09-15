@@ -11,6 +11,8 @@ var (
 	ErrMeetingEnded       = errors.New("meeting has ended")
 	ErrHostRequired       = errors.New("host permission required")
 	ErrParticipantBanned  = errors.New("participant is banned")
+	ErrChatUnauthorized   = errors.New("chat session required")
+	ErrInvalidChatMessage = errors.New("invalid chat message")
 	ErrInvalidParticipant = errors.New("invalid participant identity")
 )
 
@@ -54,7 +56,21 @@ type MeetingAnalyticsEvent struct {
 	Banned              bool
 }
 
+type ChatMessage struct {
+	ID       int    `json:"id"`
+	Identity string `json:"identity"`
+	Name     string `json:"name"`
+	Text     string `json:"text"`
+	SentAt   int64  `json:"sentAt"`
+}
+
+type ChatState struct {
+	HistoryEnabled bool          `json:"history_enabled"`
+	Messages       []ChatMessage `json:"messages"`
+}
+
 type Meeting struct {
+	ChatHistoryEnabled          bool             `json:"chat_history_enabled"`
 	ID                          string           `json:"id"`
 	Code                        string           `json:"code"`
 	Title                       string           `json:"title"`
@@ -88,15 +104,22 @@ type CreateMeetingResponse struct {
 }
 
 type JoinMeetingResponse struct {
-	Meeting   *Meeting `json:"meeting"`
-	Token     string   `json:"token"`
-	ServerURL string   `json:"server_url"`
-	Role      string   `json:"role"`
-	Identity  string   `json:"identity"`
-	Demo      bool     `json:"demo"`
+	ChatToken string    `json:"chat_token"`
+	Chat      ChatState `json:"chat"`
+	Meeting   *Meeting  `json:"meeting"`
+	Token     string    `json:"token"`
+	ServerURL string    `json:"server_url"`
+	Role      string    `json:"role"`
+	Identity  string    `json:"identity"`
+	Demo      bool      `json:"demo"`
 }
 
 type MeetingRepository interface {
+	OpenChatSession(context.Context, string, string, string, string) (ChatState, error)
+	GetChat(context.Context, string, string) (ChatState, error)
+	SendChat(context.Context, string, string, string, int64) (ChatMessage, error)
+	SetChatHistory(context.Context, string, bool) (*Meeting, error)
+	RevokeChatSessions(context.Context, string, string) error
 	Create(context.Context, *Meeting) error
 	ByCode(context.Context, string) (*Meeting, error)
 	ByLiveKitRoomName(context.Context, string) (*Meeting, error)
@@ -105,6 +128,9 @@ type MeetingRepository interface {
 }
 
 type MeetingService interface {
+	GetChat(context.Context, string, string) (ChatState, error)
+	SendChat(context.Context, string, string, string) (ChatMessage, error)
+	SetChatHistory(context.Context, string, bool, string) (*Meeting, error)
 	Create(context.Context, CreateMeetingDTO) (*CreateMeetingResponse, error)
 	Get(context.Context, string) (*Meeting, error)
 	Join(context.Context, string, JoinMeetingDTO, string) (*JoinMeetingResponse, error)

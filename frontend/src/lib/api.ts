@@ -12,7 +12,21 @@ export interface MeetingAnalytics {
   participants_banned: number
 }
 
+export interface StoredChatMessage {
+  id: number
+  identity: string
+  name: string
+  text: string
+  sentAt: number
+}
+
+export interface ChatState {
+  history_enabled: boolean
+  messages: StoredChatMessage[]
+}
+
 export interface Meeting {
+  chat_history_enabled?: boolean
   id: string
   code: string
   title: string
@@ -24,6 +38,8 @@ export interface Meeting {
 }
 
 export interface JoinResult {
+  chat_token?: string
+  chat?: ChatState
   meeting: Meeting
   token: string
   server_url: string
@@ -100,3 +116,19 @@ export async function endMeeting(code: string, hostToken: string) {
 }
 
 export function meetingStorageKey(code: string) { return `roobro:host:${code}` }
+
+export function getMeetingChat(code: string, chatToken: string) {
+  return request<ChatState>(`/meetings/${encodeURIComponent(code)}/chat`, { headers: { "X-Chat-Token": chatToken } })
+}
+
+export function sendMeetingChat(code: string, chatToken: string, text: string) {
+  return request<StoredChatMessage>(`/meetings/${encodeURIComponent(code)}/chat`, {
+    method: "POST", headers: { "X-Chat-Token": chatToken }, body: JSON.stringify({ text }),
+  })
+}
+
+export function setMeetingChatHistory(code: string, enabled: boolean, hostToken: string) {
+  return request<Meeting>(`/meetings/${encodeURIComponent(code)}/settings`, {
+    method: "PATCH", headers: { "X-Host-Token": hostToken }, body: JSON.stringify({ chat_history_enabled: enabled }),
+  })
+}

@@ -11,6 +11,7 @@ type MemoryRepository struct {
 	mu             sync.RWMutex
 	meetings       map[string]*domain.Meeting
 	analyticsState map[string]*meetingAnalyticsState
+	chats          map[string]*meetingChat
 }
 
 type meetingAnalyticsState struct {
@@ -23,6 +24,7 @@ type meetingAnalyticsState struct {
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
 		meetings:       make(map[string]*domain.Meeting),
+		chats:          make(map[string]*meetingChat),
 		analyticsState: make(map[string]*meetingAnalyticsState),
 	}
 }
@@ -32,6 +34,7 @@ func (r *MemoryRepository) Create(_ context.Context, meeting *domain.Meeting) er
 	defer r.mu.Unlock()
 	r.meetings[meeting.Code] = cloneMeeting(meeting)
 	r.analyticsState[meeting.Code] = newMeetingAnalyticsState()
+	r.chats[meeting.Code] = &meetingChat{sessions: make(map[string]chatSession)}
 	return nil
 }
 
@@ -64,9 +67,10 @@ func (r *MemoryRepository) Update(_ context.Context, meeting *domain.Meeting) er
 		return domain.ErrMeetingNotFound
 	}
 	updated := cloneMeeting(meeting)
-	// Analytics are mutated atomically by RecordAnalyticsEvent. Preserve them when
+	// Preserve fields mutated atomically by analytics and settings methods when
 	// lifecycle or moderation updates were based on an older meeting snapshot.
 	updated.Analytics = current.Analytics
+	updated.ChatHistoryEnabled = current.ChatHistoryEnabled
 	r.meetings[meeting.Code] = updated
 	return nil
 }
