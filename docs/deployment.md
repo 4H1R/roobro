@@ -229,14 +229,16 @@ HTTPS, and redirects, plus `7881/tcp` and `7882/udp` for media. Port `7880` shou
 no longer be publicly reachable because host Caddy proxies signaling over
 loopback.
 
-## Zoora deployment
+## Roobro production deployment
 
-The source checkout is installed at `/opt/roobro` on `ssh zoora`. This deployment
-builds the current source using `deploy/docker-compose.zoora.yml`:
+The public Git checkout is installed at `/opt/roobro` on the production server. This
+deployment uses the public GitHub Container Registry frontend and backend images
+from `docker-compose.prod.yml`:
 
 ```bash
 cd /opt/roobro
-docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/docker-compose.zoora.yml up -d --build --wait --wait-timeout 180
+docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --wait --wait-timeout 180
 ```
 
 The private `.env.prod` contains generated LiveKit credentials and these values:
@@ -253,8 +255,7 @@ LIVEKIT_TCP_PORT=7891
 LIVEKIT_UDP_PORT=7892
 ```
 
-The host Caddyfile imports `/opt/roobro/deploy/Caddyfile.zoora`. These ports keep
-Roobro separate from the existing Zoora application and LiveKit instance. UFW
+The host Caddyfile imports `/opt/roobro/deploy/Caddyfile.roobro`. UFW
 allows forwarded traffic on `7891/tcp` and `7892/udp` for Roobro media.
 
 In the `roobro.ir` DNS zone, set these records:
