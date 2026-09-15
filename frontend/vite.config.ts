@@ -1,14 +1,11 @@
 import path from "node:path"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
-import { tanstackStart } from "@tanstack/react-start/plugin/vite"
-import { nitro } from "nitro/vite"
+import { tanstackRouter } from "@tanstack/router-plugin/vite"
 import { defineConfig } from "vite"
 
-const isBuild = process.argv.includes("build")
-
 export default defineConfig({
-  plugins: [tailwindcss(), isBuild && nitro({ preset: "bun" }), tanstackStart(), react()],
+  plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), tailwindcss(), react()],
   publicDir: path.resolve(__dirname, "./public"),
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: {

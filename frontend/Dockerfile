@@ -9,13 +9,9 @@ RUN bun install --frozen-lockfile --filter @roobro/web --linker=isolated
 COPY frontend/ ./frontend/
 RUN bun --filter @roobro/web build
 
-FROM oven/bun:1.4-alpine AS runtime
-WORKDIR /app
+FROM caddy:2-alpine AS runtime
 
-ENV NODE_ENV=production \
-    PORT=3000
-COPY --from=builder /app/frontend/.output ./.output
+COPY frontend/Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder /app/frontend/dist /srv
 
-USER bun
 EXPOSE 3000
-CMD ["bun", "run", ".output/server/index.mjs"]

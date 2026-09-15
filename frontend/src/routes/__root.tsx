@@ -1,6 +1,4 @@
-import type { ReactNode } from "react"
-
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router"
+import { createRootRoute, Outlet } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { Toaster } from "sonner"
@@ -11,48 +9,8 @@ import { languages, type Language } from "@/i18n"
 import "@/i18n"
 import "@/styles.css"
 
-const SITE_URL = "https://roobro.ir"
-const TITLE = "رو به رو — تماس تصویری روان و طبیعی"
-const DESCRIPTION = "تجربه‌ای ساده و متمرکز برای جلسه‌های تصویری فارسی."
-
 export const Route = createRootRoute({
-  // Keep the document shell and metadata server-rendered while i18next owns app copy.
-  ssr: false,
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: TITLE },
-      { name: "application-name", content: "رو به رو" },
-      { name: "description", content: DESCRIPTION },
-      { name: "theme-color", content: "#f7f8f4" },
-      { property: "og:title", content: TITLE },
-      { property: "og:site_name", content: "رو به رو" },
-      { property: "og:description", content: DESCRIPTION },
-      { property: "og:type", content: "website" },
-      { property: "og:url", content: SITE_URL },
-      { property: "og:locale", content: "fa_IR" },
-      { property: "og:image", content: `${SITE_URL}/og.png` },
-      { property: "og:image:alt", content: "رو به رو — تماس تصویری روان و طبیعی" },
-      { property: "og:image:width", content: "1200" },
-      { property: "og:image:height", content: "630" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: TITLE },
-      { name: "twitter:description", content: DESCRIPTION },
-      { name: "twitter:image", content: `${SITE_URL}/og.png` },
-      { name: "twitter:image:alt", content: "رو به رو — تماس تصویری روان و طبیعی" }
-    ],
-    links: [
-      { rel: "canonical", href: SITE_URL },
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
-      { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16x16.png" },
-      { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
-      { rel: "manifest", href: "/site.webmanifest" }
-    ]
-  }),
-  component: RootComponent,
-  shellComponent: RootDocument
+  component: RootComponent
 })
 
 function RootComponent() {
@@ -66,18 +24,10 @@ function RootComponent() {
     document.documentElement.dir = languages[language].dir
   }, [language])
 
-  return <ThemeProvider><Outlet /></ThemeProvider>
-}
-
-function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="fa" dir="rtl" data-theme="light" suppressHydrationWarning>
-      <head><HeadContent /></head>
-      <body>
-        {children}
-        <Toaster position="top-center" richColors />
-        <Scripts />
-      </body>
-    </html>
+    <ThemeProvider>
+      <Outlet />
+      <Toaster position="top-center" richColors />
+    </ThemeProvider>
   )
 }

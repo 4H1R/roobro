@@ -229,6 +229,45 @@ HTTPS, and redirects, plus `7881/tcp` and `7882/udp` for media. Port `7880` shou
 no longer be publicly reachable because host Caddy proxies signaling over
 loopback.
 
+## Zoora deployment
+
+The source checkout is installed at `/opt/roobro` on `ssh zoora`. This deployment
+builds the current source using `deploy/docker-compose.zoora.yml`:
+
+```bash
+cd /opt/roobro
+docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/docker-compose.zoora.yml up -d --build --wait --wait-timeout 180
+```
+
+The private `.env.prod` contains generated LiveKit credentials and these values:
+
+```dotenv
+COMPOSE_PROJECT_NAME=roobro
+FRONTEND_URL=https://roobro.ir
+LIVEKIT_PUBLIC_URL=wss://livekit.roobro.ir
+APP_BIND_ADDRESS=127.0.0.1
+APP_PORT=8091
+LIVEKIT_SIGNAL_BIND_ADDRESS=127.0.0.1
+LIVEKIT_SIGNAL_PORT=7890
+LIVEKIT_TCP_PORT=7891
+LIVEKIT_UDP_PORT=7892
+```
+
+The host Caddyfile imports `/opt/roobro/deploy/Caddyfile.zoora`. These ports keep
+Roobro separate from the existing Zoora application and LiveKit instance. UFW
+allows forwarded traffic on `7891/tcp` and `7892/udp` for Roobro media.
+
+In the `roobro.ir` DNS zone, set these records:
+
+| Type | Name | Value |
+| --- | --- | --- |
+| A | `@` | `212.23.201.250` |
+| A | `livekit` | `212.23.201.250` |
+
+Use DNS-only records if the DNS provider offers HTTP proxying. Caddy manages
+public HTTPS certificates once both names resolve to this server. Remove any
+conflicting AAAA records unless IPv6 is configured for this deployment.
+
 ## Updating and rolling back
 
 Rerun the installer to refresh Compose and Caddy deployment files, preserve the
