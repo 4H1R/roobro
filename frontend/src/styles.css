@@ -262,6 +262,14 @@ html[data-theme="dark"] .control-dock button.end-call:hover { border-color: tran
 .safe-note svg { width: 14px; color: var(--brand); flex: 0 0 auto; }
 .permission-note { color: #a75648; }
 
+.permission-intro h1 { font-size: clamp(28px, 4vw, 36px); }
+.permission-intro > p { margin: 16px 0; color: var(--muted); line-height: 1.8; }
+.permission-intro > .permission-note { color: #a75648; }
+.permission-devices { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0; }
+.permission-devices span { display: inline-flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 14px; background: var(--brand-soft); color: var(--brand-dark); font-weight: 700; }
+.permission-devices svg { width: 20px; height: 20px; }
+.camera-placeholder span > svg { width: 48px; height: 48px; }
+
 .meeting-room,
 .room-chrome { font-family: var(--app-font); }
 .meeting-room[data-lk-theme] {
@@ -431,7 +439,7 @@ html[data-theme="dark"] .control-dock button.end-call:hover { border-color: tran
 .device-menu button > svg { width: 16px; flex: 0 0 auto; color: var(--room-accent); }
 .device-menu-empty { padding: 13px 10px; color: var(--room-muted); font-size: 12px; text-align: center; }
 .main-controls button.hangup { width: 62px; border-color: transparent; border-radius: 14px; background: linear-gradient(135deg, var(--coral), #cf4a39); box-shadow: 0 9px 20px rgba(239,106,86,.2); }
-.main-controls button.hangup:hover { background: linear-gradient(135deg, #f37662, #d84f3d); }
+.main-controls button.hangup:hover { border-color: #dc2626; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 8px 18px rgba(220,38,38,.3); }
 .main-controls svg, .side-controls svg { width: 17px; }
 .side-controls { justify-content: flex-end; }
 .side-controls button > span { position: absolute; top: -4px; inset-inline-end: -3px; width: 17px; height: 17px; display: grid; place-items: center; border: 2px solid var(--room-bg); border-radius: 50%; background: var(--room-accent); color: #12352a; font-size: 8px; font-weight: 800; }
@@ -568,6 +576,7 @@ html[data-theme="light"] .device-menu-title { background: rgba(249,251,250,.98);
 html[data-theme="light"] .main-controls .device-menu button { border: 0; background: transparent; color: var(--ink); box-shadow: none; }
 html[data-theme="light"] .main-controls .device-menu button:hover, html[data-theme="light"] .main-controls .device-menu button:focus-visible, html[data-theme="light"] .main-controls .device-menu button.selected { border-color: transparent; background: #e5f0eb; color: var(--brand-dark); box-shadow: none; }
 html[data-theme="light"] .main-controls button.hangup { color: white; }
+html[data-theme="light"] .main-controls button.hangup:hover { border-color: #dc2626; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 8px 18px rgba(220,38,38,.3); }
 html[data-theme="light"] .side-controls button > span { border-color: var(--room-bg); color: white; }
 html[data-theme="light"] .reaction-bubble { border-color: rgba(18,32,28,.1); background: rgba(255,255,255,.9); color: var(--ink); box-shadow: 0 12px 32px rgba(27,63,52,.16); }
 html[data-theme="light"] .reaction-bubble small { color: var(--ink); }

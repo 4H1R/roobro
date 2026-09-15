@@ -6,8 +6,10 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandMark } from "@/components/brand-mark"
+import { MediaPermissionIntro } from "@/components/media-permission-intro"
 import { MeetingRoom } from "@/components/meeting-room"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback"
+import { useLobbyMedia } from "@/hooks/use-lobby-media"
 import { endMeeting, getMeeting, joinMeeting, meetingStorageKey, removeMeetingParticipant, type JoinResult, type Meeting } from "@/lib/api"
 import { prepareMeetingSounds } from "@/lib/meeting-sounds"
 
@@ -15,23 +17,35 @@ export const Route = createFileRoute("/meet/$code")({ component: MeetingPage })
 
 const rememberedNameStorageKey = "roobro:remembered-name"
 
+type MeetingSessionState =
+  | { status: "loading" | "missing" | "ended" }
+  | { status: "lobby"; meeting: Meeting }
+  | { status: "room"; meeting: Meeting; result: JoinResult; displayName: string }
+
 function MeetingPage() {
   const { code } = Route.useParams()
+  return <MeetingSession key={code} code={code} />
+}
+
+function MeetingSession({ code }: { code: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const shouldReduceMotion = useReducedMotion()
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const [meeting, setMeeting] = useState<Meeting | null>(null)
-  const [state, setState] = useState<"loading" | "lobby" | "room" | "missing" | "ended">("loading")
+  const [session, setSession] = useState<MeetingSessionState>({ status: "loading" })
+  const sessionActive = useRef(false)
+  const state = session.status
+  const meeting = "meeting" in session ? session.meeting : null
   const [name, setName] = useState("")
   const [rememberName, setRememberName] = useState(false)
-  const [cameraOn, setCameraOn] = useState(true)
   const [micOn, setMicOn] = useState(false)
-  const [permissionDenied, setPermissionDenied] = useState(false)
+  const { access, requestAccess, cameraOn, setCameraOn, videoRef, previewUnavailable } = useLobbyMedia(state === "lobby")
   const [joining, setJoining] = useState(false)
-  const [joinResult, setJoinResult] = useState<JoinResult | null>(null)
   const { copied, copy } = useCopyFeedback()
+
+  useEffect(() => {
+    sessionActive.current = true
+    return () => { sessionActive.current = false }
+  }, [])
 
   useEffect(() => {
     const rememberedName = localStorage.getItem(rememberedNameStorageKey)?.trim()
@@ -44,18 +58,18 @@ function MeetingPage() {
   useEffect(() => {
     const demoTitle = sessionStorage.getItem(`roobro:demo:${code}`)
     if (demoTitle) {
-      setMeeting({ id: code, code, title: demoTitle, status: "created", created_at: new Date().toISOString() })
-      setState("lobby")
+      setSession({ status: "lobby", meeting: { id: code, code, title: demoTitle, status: "created", created_at: new Date().toISOString() } })
       return
     }
-    getMeeting(code).then((value) => { setMeeting(value); setState(value.status === "ended" ? "ended" : "lobby") }).catch(() => setState("missing"))
+    let cancelled = false
+    getMeeting(code).then((value) => {
+      if (cancelled) return
+      setSession(value.status === "ended" ? { status: "ended" } : { status: "lobby", meeting: value })
+    }).catch(() => {
+      if (!cancelled) setSession({ status: "missing" })
+    })
+    return () => { cancelled = true }
   }, [code])
-
-  useEffect(() => {
-    if (state !== "lobby" || !cameraOn) { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; return }
-    navigator.mediaDevices?.getUserMedia({ video: true, audio: false }).then((stream) => { streamRef.current = stream; if (videoRef.current) videoRef.current.srcObject = stream }).catch(() => { setPermissionDenied(true); setCameraOn(false) })
-    return () => { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null }
-  }, [state, cameraOn])
 
   const copyLink = async () => {
     await copy(location.href)
@@ -64,7 +78,8 @@ function MeetingPage() {
 
   const join = async () => {
     const displayName = name.trim()
-    if (!meeting || displayName.length < 2) return
+    if (session.status !== "lobby" || displayName.length < 2 || access.status !== "granted" || joining) return
+    const meeting = session.meeting
     prepareMeetingSounds()
     setJoining(true)
     const hostToken = sessionStorage.getItem(meetingStorageKey(code)) ?? undefined
@@ -72,18 +87,19 @@ function MeetingPage() {
       const result = code.startsWith("demo-")
         ? { meeting: { ...meeting, status: "active" as const }, token: "", server_url: "", role: hostToken ? "host" as const : "participant" as const, identity: `demo-${Date.now()}`, demo: true }
         : await joinMeeting(code, displayName, hostToken)
+      if (!sessionActive.current) return
       if (rememberName) localStorage.setItem(rememberedNameStorageKey, displayName)
       else localStorage.removeItem(rememberedNameStorageKey)
-      streamRef.current?.getTracks().forEach((track) => track.stop())
-      setJoinResult(result)
-      setState("room")
+      setSession({ status: "room", meeting, result, displayName })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("lobby.notFound"))
-    } finally { setJoining(false) }
+      if (sessionActive.current) toast.error(error instanceof Error ? error.message : t("lobby.notFound"))
+    } finally {
+      if (sessionActive.current) setJoining(false)
+    }
   }
 
   const leave = () => void navigate({ to: "/" })
-  const finished = () => setState("ended")
+  const finished = () => setSession({ status: "ended" })
   const end = async () => {
     const hostToken = sessionStorage.getItem(meetingStorageKey(code))
     if (code.startsWith("demo-")) {
@@ -111,7 +127,7 @@ function MeetingPage() {
     }
   }
 
-  if (state === "room" && joinResult) return <MeetingRoom result={joinResult} displayName={name} code={code} justCreated={meeting?.status === "created" && joinResult.role === "host"} cameraOn={cameraOn} micOn={micOn} onLeave={leave} onEnd={end} onFinished={finished} onModerateParticipant={moderateParticipant} />
+  if (session.status === "room") return <MeetingRoom result={session.result} displayName={session.displayName} code={code} justCreated={session.meeting.status === "created" && session.result.role === "host"} cameraOn={cameraOn} micOn={micOn} onLeave={leave} onEnd={end} onFinished={finished} onModerateParticipant={moderateParticipant} />
   if (state === "loading") return <motion.main className="status-page" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}><motion.div className="loading-mark" animate={shouldReduceMotion ? undefined : { y: [0, -6, 0], scale: [1, 1.03, 1] }} transition={{ duration: 1.8, ease: "easeInOut", repeat: Infinity }}><BrandMark /></motion.div><p>{t("lobby.checking")}</p></motion.main>
   if (state === "missing" || state === "ended") return <motion.main className="status-page" initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}><motion.div className="status-icon" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.36, delay: shouldReduceMotion ? 0 : 0.08 }}><VideoOff /></motion.div><h1>{state === "ended" ? t("lobby.ended") : t("lobby.notFound")}</h1>{state === "ended" && <p>{t("lobby.endedBody")}</p>}<Link to="/">{t("lobby.goHome")}</Link></motion.main>
 
@@ -120,27 +136,29 @@ function MeetingPage() {
       <motion.header className="lobby-header" initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}><Link to="/" className="brand"><span className="brand-mark"><BrandMark /></span><span>{t("brand.name")}</span></Link><span>{t("lobby.brand")}</span></motion.header>
       <section className="lobby-layout">
         <motion.div className="camera-preview" initial={shouldReduceMotion ? false : { opacity: 0, x: -18, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.48, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.22, 1, 0.36, 1] }}>
-          {cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <div className="camera-placeholder"><span>{name.trim().slice(0,1).toUpperCase() || "r"}</span></div>}
+          {access.status === "granted" && cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <div className="camera-placeholder"><span>{access.status === "granted" ? name.trim().slice(0,1).toUpperCase() || "r" : <Video />}</span></div>}
           <div className="preview-title"><strong>{meeting?.title}</strong><code dir="ltr">{code}</code></div>
-          <div className="preview-toggles">
+          {access.status === "granted" && <div className="preview-toggles">
             <button className={!micOn ? "off" : ""} onClick={() => setMicOn(!micOn)} title={micOn ? t("lobby.micOn") : t("lobby.micOff")}>{micOn ? <Mic /> : <MicOff />}</button>
             <button className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} title={cameraOn ? t("lobby.cameraOn") : t("lobby.cameraOff")}>{cameraOn ? <Video /> : <VideoOff />}</button>
-          </div>
+          </div>}
         </motion.div>
         <motion.div className="join-card" initial={shouldReduceMotion ? false : { opacity: 0, x: 18, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.48, delay: shouldReduceMotion ? 0 : 0.14, ease: [0.22, 1, 0.36, 1] }}>
           <div className="guest-chip"><ShieldCheck />{t("lobby.guest")}</div>
-          <h1>{t("lobby.ready")}</h1>
-          <p>{meeting?.title}</p>
-          <label htmlFor="display-name">{t("lobby.name")}</label>
-          <input id="display-name" autoFocus autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void join()} placeholder={t("lobby.namePlaceholder")} />
-          <label className="remember-name">
-            <input type="checkbox" checked={rememberName} onChange={(event) => setRememberName(event.target.checked)} />
-            <span>{t("lobby.rememberName")}</span>
-          </label>
-          {permissionDenied && <span className="permission-note">{t("lobby.permission")}</span>}
-          <button className="join-now" disabled={joining || name.trim().length < 2} onClick={join}>{joining ? t("lobby.joining") : t("lobby.join")}</button>
+          {access.status !== "granted" ? <MediaPermissionIntro access={access} onAllow={requestAccess} /> : <>
+            <h1>{t("lobby.ready")}</h1>
+            <p>{meeting?.title}</p>
+            <label htmlFor="display-name">{t("lobby.name")}</label>
+            <input id="display-name" autoFocus autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void join()} placeholder={t("lobby.namePlaceholder")} />
+            <label className="remember-name">
+              <input type="checkbox" checked={rememberName} onChange={(event) => setRememberName(event.target.checked)} />
+              <span>{t("lobby.rememberName")}</span>
+            </label>
+            {previewUnavailable && <span className="permission-note">{t("lobby.permission")}</span>}
+            <button className="join-now" disabled={joining || name.trim().length < 2} onClick={join}>{joining ? t("lobby.joining") : t("lobby.join")}</button>
+          </>}
           <button className="copy-link" onClick={copyLink} aria-live="polite">{copied ? <Check /> : <Copy />}{t(copied ? "common.copied" : "lobby.copy")}</button>
-          <div className="safe-note"><ShieldCheck />{t("lobby.safe")}</div>
+          {access.status === "granted" && <div className="safe-note"><ShieldCheck />{t("lobby.safe")}</div>}
         </motion.div>
       </section>
     </motion.main>
