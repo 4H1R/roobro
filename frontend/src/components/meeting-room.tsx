@@ -1,6 +1,6 @@
 import { ConnectionQualityIndicator, LiveKitRoom, ParticipantName, ParticipantPlaceholder, ParticipantTile, RoomAudioRenderer, useParticipants, useRoomContext, useTracks, VideoTrack } from "@livekit/components-react"
 import { DisconnectReason, RoomEvent, Track, type RemoteParticipant, type Room } from "livekit-client"
-import { Ban, Check, ChevronUp, Clock3, Copy, Hand, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
+import { Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -219,7 +219,6 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
   const [cameraOn, setCameraOn] = useState(initialCamera)
   const [micOn, setMicOn] = useState(initialMic)
   const [screenSharing, setScreenSharing] = useState(room?.localParticipant?.isScreenShareEnabled ?? false)
-  const [handRaised, setHandRaised] = useState(false)
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false)
   const [reactions, setReactions] = useState<MeetingReaction[]>([])
   const [panel, setPanel] = useState<"people" | "chat" | "details" | null>(null)
@@ -618,11 +617,10 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
             <button className={reactionPickerOpen ? "active" : ""} aria-label={t("room.reactions")} aria-haspopup="menu" aria-controls="reaction-picker" aria-expanded={reactionPickerOpen} onClick={() => { setMobileMenuOpen(false); setReactionPickerOpen((open) => !open) }} title={t("room.reactions")}><SmilePlus /></button>
             <AnimatePresence>
               {reactionPickerOpen && <motion.div id="reaction-picker" className="reaction-picker" role="menu" aria-label={t("room.reactions")} initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}>
-                {REACTION_EMOJIS.map((emoji) => <motion.button key={emoji} type="button" role="menuitem" whileHover={shouldReduceMotion ? undefined : { scale: 1.2, y: -2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }} aria-label={t("room.sendReaction", { emoji })} onClick={() => void sendReaction(emoji)}><span aria-hidden="true">{emoji}</span></motion.button>)}
+                {REACTION_EMOJIS.map((emoji) => <motion.button key={emoji} type="button" role="menuitem" whileHover={shouldReduceMotion ? undefined : { scale: 1.2, y: -2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }} transition={{ type: "tween", duration: shouldReduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }} aria-label={t("room.sendReaction", { emoji })} onClick={() => void sendReaction(emoji)}><span aria-hidden="true">{emoji}</span></motion.button>)}
               </motion.div>}
             </AnimatePresence>
           </div>
-          <button className={`desktop-secondary-action ${handRaised ? "active" : ""}`} aria-pressed={handRaised} onClick={() => setHandRaised((raised) => !raised)} title={t("room.raiseHand")}><Hand /></button>
           <button className={`mobile-panel-action ${panel === "chat" ? "active" : ""}`} aria-label={t("room.chat")} onClick={() => togglePanel("chat")} title={t("room.chat")}><MessageCircle />{unreadMessageCount > 0 && <span className="chat-unread-badge" aria-label={t("room.unreadMessages", { count: unreadMessageCount })}>{unreadMessageCount > 99 ? "99+" : unreadMessageCount}</span>}</button>
           <div className="mobile-more-wrap" ref={mobileMenuRef}>
             <button className="mobile-more" aria-label={t("room.more")} aria-haspopup="menu" aria-controls="mobile-actions-menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} title={t("room.more")}><MoreHorizontal /></button>

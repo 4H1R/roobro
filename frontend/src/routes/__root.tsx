@@ -27,7 +27,12 @@ function RootComponent() {
   return (
     <ThemeProvider>
       <Outlet />
-      <Toaster position="top-center" richColors />
+      <Toaster
+        position="top-center"
+        richColors
+        style={{ fontFamily: "var(--app-font)" }}
+        toastOptions={{ style: { fontSize: "14px", lineHeight: 1.7 } }}
+      />
     </ThemeProvider>
   )
 }
