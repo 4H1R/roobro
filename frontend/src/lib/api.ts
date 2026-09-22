@@ -54,6 +54,10 @@ interface Envelope<T> {
   error?: { code: string; message: string }
 }
 
+export class APIError extends Error {
+  constructor(message: string, public readonly status: number) { super(message) }
+}
+
 const participantIDStorageKey = "roobro:participant-id"
 let fingerprintAgent: ReturnType<typeof FingerprintJS.load> | null = null
 
@@ -82,7 +86,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...init?.headers }
   })
   const payload = (await response.json()) as Envelope<T>
-  if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error?.message ?? "Request failed")
+  if (!response.ok || !payload.success || !payload.data) throw new APIError(payload.error?.message ?? "Request failed", response.status)
   return payload.data
 }
 

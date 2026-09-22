@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 )
@@ -14,6 +16,8 @@ var (
 	ErrChatUnauthorized   = errors.New("chat session required")
 	ErrInvalidChatMessage = errors.New("invalid chat message")
 	ErrInvalidParticipant = errors.New("invalid participant identity")
+	ErrCapacity           = errors.New("meeting resource capacity reached")
+	ErrRateLimited        = errors.New("meeting rate limit reached")
 )
 
 type MeetingStatus string
@@ -25,15 +29,16 @@ const (
 )
 
 type MeetingAnalytics struct {
-	ParticipantJoins       int `json:"participant_joins"`
-	UniqueParticipants     int `json:"unique_participants"`
-	CurrentParticipants    int `json:"current_participants"`
-	PeakParticipants       int `json:"peak_participants"`
-	CameraActivations      int `json:"camera_activations"`
-	ScreenShareActivations int `json:"screen_share_activations"`
-	MicrophoneActivations  int `json:"microphone_activations"`
-	ParticipantsRemoved    int `json:"participants_removed"`
-	ParticipantsBanned     int `json:"participants_banned"`
+	Truncated              bool `json:"truncated,omitempty"`
+	ParticipantJoins       int  `json:"participant_joins"`
+	UniqueParticipants     int  `json:"unique_participants"`
+	CurrentParticipants    int  `json:"current_participants"`
+	PeakParticipants       int  `json:"peak_participants"`
+	CameraActivations      int  `json:"camera_activations"`
+	ScreenShareActivations int  `json:"screen_share_activations"`
+	MicrophoneActivations  int  `json:"microphone_activations"`
+	ParticipantsRemoved    int  `json:"participants_removed"`
+	ParticipantsBanned     int  `json:"participants_banned"`
 }
 
 type MeetingAnalyticsEventKind string
@@ -52,6 +57,7 @@ type MeetingAnalyticsEvent struct {
 	ID                  string
 	Kind                MeetingAnalyticsEventKind
 	ParticipantIdentity string
+	ChatSessionID       string
 	TrackID             string
 	Banned              bool
 }
@@ -70,6 +76,8 @@ type ChatState struct {
 }
 
 type Meeting struct {
+	Demo                        bool             `json:"-"`
+	LastActivityAt              time.Time        `json:"-"`
 	ChatHistoryEnabled          bool             `json:"chat_history_enabled"`
 	ID                          string           `json:"id"`
 	Code                        string           `json:"code"`
@@ -123,7 +131,9 @@ type MeetingRepository interface {
 	Create(context.Context, *Meeting) error
 	ByCode(context.Context, string) (*Meeting, error)
 	ByLiveKitRoomName(context.Context, string) (*Meeting, error)
-	Update(context.Context, *Meeting) error
+	Activate(context.Context, string, time.Time) (*Meeting, error)
+	BanParticipant(context.Context, string, string) (bool, error)
+	Finish(context.Context, string, time.Time) error
 	RecordAnalyticsEvent(context.Context, string, MeetingAnalyticsEvent) error
 }
 
@@ -144,7 +154,16 @@ type LiveKitClient interface {
 	CreateRoom(context.Context, string, uint32, uint32, uint32) error
 	DeleteRoom(context.Context, string) error
 	RemoveParticipant(context.Context, string, string) error
-	GenerateToken(roomName, identity, name string, host bool) (string, error)
+	GenerateToken(roomName, identity, name string, host bool, chatToken string) (string, error)
 	PublicURL() string
 	Configured() bool
+}
+
+const ChatSessionAttribute = "roobro.chat-session"
+
+// Public correlation only, never an authorization capability. A departure can
+// retire its exact chat session without trusting clocks or affecting a rejoin.
+func ChatSessionID(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

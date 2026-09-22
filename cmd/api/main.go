@@ -26,6 +26,13 @@ func main() {
 	}
 
 	repository := meetings.NewMemoryRepository()
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			repository.Cleanup()
+		}
+	}()
 	livekitClient := lk.NewClient(cfg)
 	service := meetings.NewService(repository, livekitClient)
 	handler := meetings.NewHandler(service, cfg.LiveKitAPIKey, cfg.LiveKitSecret)

@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback"
 import { getMeetingChat, meetingStorageKey, sendMeetingChat, setMeetingChatHistory, type JoinResult, type StoredChatMessage } from "@/lib/api"
 import { formatElapsedTime } from "@/lib/format-elapsed-time"
+import { mergeChatMessages } from "@/lib/chat-history"
 import { formatMessageTime } from "@/lib/format-message-time"
 import { playMessageReceivedSound, playMessageSentSound, playParticipantJoinedSound, playParticipantLeftSound } from "@/lib/meeting-sounds"
 
@@ -210,14 +211,14 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
   const [switchingDevice, setSwitchingDevice] = useState(false)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [meetingReadyOpen, setMeetingReadyOpen] = useState(justCreated && result.role === "host")
-  const [messages, setMessages] = useState<ChatMessage[]>(() => (result.chat?.messages ?? []).map((item) => ({ ...item, isOwn: item.identity === result.identity })))
+  const [messages, setMessages] = useState<ChatMessage[]>(() => mergeChatMessages([], (result.chat?.messages ?? []).map((item) => ({ ...item, isOwn: item.identity === result.identity }))))
   const [chatHistoryEnabled, setChatHistoryEnabled] = useState(result.chat?.history_enabled ?? result.meeting.chat_history_enabled ?? true)
   const [savingChatSetting, setSavingChatSetting] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const chatPanelVisible = useRef(false)
   chatPanelVisible.current = panel === "chat"
-  const seenMessageIDs = useRef(new Set(result.chat?.messages.map((item) => item.id) ?? []))
+  const lastPolledMessageID = useRef(Math.max(0, ...(result.chat?.messages.map((item) => item.id) ?? [])))
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [message, setMessage] = useState("")
   const [participantMenu, setParticipantMenu] = useState<string | null>(null)
@@ -310,10 +311,12 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
         const chat = await getMeetingChat(code, result.chat_token!)
         if (stopped) return
         setChatHistoryEnabled(chat.history_enabled)
-        const incoming = chat.messages.filter((item) => !seenMessageIDs.current.has(item.id))
-        for (const item of incoming) seenMessageIDs.current.add(item.id)
+        const incoming = chat.messages.filter((item) => item.id > lastPolledMessageID.current)
+        lastPolledMessageID.current = Math.max(lastPolledMessageID.current, ...chat.messages.map((item) => item.id))
+        // Merge the bounded snapshot so enabling history can backfill older IDs
+        // and a poll started before a local send cannot discard its response.
+        setMessages((current) => mergeChatMessages(current, chat.messages.map((item) => ({ ...item, isOwn: item.identity === result.identity }))))
         if (incoming.length > 0) {
-          setMessages((current) => [...current, ...incoming.map((item) => ({ ...item, isOwn: item.identity === result.identity }))].sort((a, b) => (a.id ?? 0) - (b.id ?? 0)))
           const unread = incoming.filter((item) => item.identity !== result.identity && item.sentAt >= joinedAt.current).length
           if (unread > 0 && !(chatPanelVisible.current && document.visibilityState === "visible")) {
             setUnreadMessageCount((current) => current + unread)
@@ -515,9 +518,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
   }
 
   const appendStoredMessage = (item: StoredChatMessage) => {
-    if (seenMessageIDs.current.has(item.id)) return
-    seenMessageIDs.current.add(item.id)
-    setMessages((current) => [...current, { ...item, isOwn: item.identity === result.identity }].sort((a, b) => (a.id ?? 0) - (b.id ?? 0)))
+    setMessages((current) => mergeChatMessages(current, [{ ...item, isOwn: item.identity === result.identity }]))
   }
 
   const send = async (event: React.FormEvent) => {
@@ -528,7 +529,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
     setChatError(null)
     try {
       if (result.chat_token) appendStoredMessage(await sendMeetingChat(code, result.chat_token, text))
-      else setMessages((current) => [...current, { name: displayName, text, sentAt: Date.now(), isOwn: true }])
+      else setMessages((current) => mergeChatMessages(current, [{ name: displayName, text, sentAt: Date.now(), isOwn: true }]))
       setMessage((current) => current.trim() === text ? "" : current)
       void playMessageSentSound()
     } catch {
@@ -608,7 +609,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
                   const canModerate = result.role === "host" && !participant.isLocal && onModerateParticipant
                   return <div className="people-list" key={participant.identity}><div className="person-avatar">{participantName.slice(0, 1).toUpperCase()}</div><div><strong>{participantName}</strong>{participant.isLocal && <span>{result.role === "host" ? `${t("room.you")} · ${t("room.host")}` : t("room.you")}</span>}</div><div className="participant-actions">{participant.isMicrophoneEnabled ? <Mic /> : <MicOff />}{canModerate && <button className="participant-menu-trigger" aria-label={t("room.participantOptions", { name: participantName })} aria-expanded={participantMenu === participant.identity} onClick={() => setParticipantMenu((current) => current === participant.identity ? null : participant.identity)}><MoreVertical /></button>}</div>{participantMenu === participant.identity && canModerate && <div className="participant-moderation-menu" role="menu"><button role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, false)}><UserMinus />{t("room.removeParticipant")}</button><button className="danger" role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, true)}><Ban />{t("room.banParticipant")}</button></div>}</div>
                 })}</div>}
-                {panel === "chat" && <>{result.role === "host" && <label className="chat-history-setting"><input type="checkbox" role="switch" checked={chatHistoryEnabled} disabled={savingChatSetting} onChange={(event) => void toggleChatHistory(event.target.checked)} /><span><strong>{t("room.chatHistory")}</strong><small>{t("room.chatHistoryBody")}</small></span></label>}{chatError && <p className="chat-error" role="alert">{chatError}</p>}<div className="messages">{messages.length === 0 ? <motion.div className="empty-chat" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}><MessageCircle /><span>{t("room.chat")}</span></motion.div> : <AnimatePresence initial={false}>{messages.map((item, index) => <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div><p>{item.text}</p></motion.div>)}</AnimatePresence>}</div><form className="chat-form" onSubmit={send}><input value={message} maxLength={MAX_CHAT_MESSAGE_LENGTH} onChange={(event) => setMessage(event.target.value)} placeholder={t("room.messagePlaceholder")} /><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }} disabled={sendingMessage || !message.trim()} aria-label={t("room.send")}><Send /></motion.button></form></>}
+                {panel === "chat" && <><small>{t("room.chatRetention")}</small>{result.role === "host" && <label className="chat-history-setting"><input type="checkbox" role="switch" checked={chatHistoryEnabled} disabled={savingChatSetting} onChange={(event) => void toggleChatHistory(event.target.checked)} /><span><strong>{t("room.chatHistory")}</strong><small>{t("room.chatHistoryBody")}</small></span></label>}{chatError && <p className="chat-error" role="alert">{chatError}</p>}<div className="messages">{messages.length === 0 ? <motion.div className="empty-chat" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}><MessageCircle /><span>{t("room.chat")}</span></motion.div> : <AnimatePresence initial={false}>{messages.map((item, index) => <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div><p>{item.text}</p></motion.div>)}</AnimatePresence>}</div><form className="chat-form" onSubmit={send}><input value={message} maxLength={MAX_CHAT_MESSAGE_LENGTH} onChange={(event) => setMessage(event.target.value)} placeholder={t("room.messagePlaceholder")} /><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }} disabled={sendingMessage || !message.trim()} aria-label={t("room.send")}><Send /></motion.button></form></>}
                 {panel === "details" && <div className="details-panel"><span>{t("room.details")}</span><code dir="ltr">{code}</code><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }} onClick={() => void copyMeetingDetailsLink(location.href)} aria-live="polite">{detailsCopied ? <><Check />{t("common.copied")}</> : t("room.copyCode")}</motion.button></div>}
               </motion.div>
             </AnimatePresence>

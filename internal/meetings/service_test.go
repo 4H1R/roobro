@@ -33,7 +33,7 @@ func (f *fakeLiveKit) RemoveParticipant(_ context.Context, roomName, identity st
 	f.removedIdentity = identity
 	return nil
 }
-func (*fakeLiveKit) GenerateToken(_, identity, _ string, _ bool) (string, error) {
+func (*fakeLiveKit) GenerateToken(_, identity, _ string, _ bool, _ string) (string, error) {
 	return "token-" + identity, nil
 }
 

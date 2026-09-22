@@ -10,6 +10,7 @@ import (
 	lksdk "github.com/livekit/server-sdk-go/v2"
 
 	"github.com/4H1R/roobro/internal/config"
+	"github.com/4H1R/roobro/internal/domain"
 )
 
 type Client struct {
@@ -77,7 +78,7 @@ func (c *Client) RemoveParticipant(ctx context.Context, roomName, identity strin
 	return nil
 }
 
-func (c *Client) GenerateToken(roomName, identity, name string, host bool) (string, error) {
+func (c *Client) GenerateToken(roomName, identity, name string, host bool, chatToken string) (string, error) {
 	if !c.Configured() {
 		return "", nil
 	}
@@ -92,6 +93,7 @@ func (c *Client) GenerateToken(roomName, identity, name string, host bool) (stri
 		SetVideoGrant(grant).
 		SetIdentity(identity).
 		SetName(name).
+		SetAttributes(map[string]string{domain.ChatSessionAttribute: domain.ChatSessionID(chatToken)}).
 		SetValidFor(12 * time.Hour).
 		ToJWT()
 	if err != nil {

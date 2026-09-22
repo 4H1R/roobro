@@ -180,6 +180,44 @@ meeting metadata, and multiple API replicas do not share state yet. The reposito
 interface is ready for a persistent implementation without changing handlers or
 the meeting service.
 
+## Resource and retention limits
+
+The single API process admits at most 100 stored meetings. Unused meeting links
+expire after one hour; ended summaries expire after 15 minutes. Ending a meeting
+immediately releases chat, sessions and detailed analytics. Active meetings stay
+until the host ends them or LiveKit reports the room finished, and count against
+the limit throughout. API-backed demo meetings, which have no LiveKit lifecycle
+webhooks, expire after five minutes without chat/session activity.
+
+Chat retains only the latest 200 messages, with monotonically increasing IDs.
+The history switch exposes only that retained window; disabling history still
+excludes messages sent before a participant joined. Each room admits 100 chat
+sessions, which expire after 12 hours or five idle minutes. Signed participant
+departure events retire matching old sessions using a public, non-secret session
+correlation attribute. Missing or modified attributes fall back to idle expiry;
+delayed events cannot revoke a newer join's token.
+Rejoining the same participant identity
+replaces its old chat token. Browser chat state is also limited to 200 messages.
+Room joins and chat sends each allow 10 requests/second with a burst of 20.
+Meeting creation allows one/second globally with a burst of 10. Capacity and
+rate failures return HTTP 429; clients should retry later.
+
+API bodies are limited to 64 KiB, or 1 MiB for signed LiveKit webhooks, before
+decoding or authentication (including chunked requests). The API permits 64
+requests in flight, 1,000 requests/second globally (burst 2,000), and 200/second
+per TCP peer (burst 400). Per-peer creation allows one every five seconds with
+a burst of 10. Peer-budget bookkeeping is capped at 2,048 entries and idle
+entries expire after five minutes. Forwarding headers cannot change these peer
+budgets: behind the supplied gateway all clients share its peer budget. A public
+proxy can additionally impose per-client limits.
+
+Analytics deduplication sets are capped at 1,024 entries each; when detail cannot
+be retained, analytics responses set `truncated: true` and totals may be partial.
+Ban sets accept at most 1,000 identities per meeting and reject further additions
+explicitly without forgetting existing bans. Anonymous identifiers remain
+client-supplied; banning an identity does not authenticate or permanently exclude
+a person using a new identifier.
+
 ## Contributing
 
 Issues and pull requests are welcome. Run `make test` and `make front-build`

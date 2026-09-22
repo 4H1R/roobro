@@ -29,12 +29,11 @@ func TestChatHistorySettingAndLateJoins(t *testing.T) {
 	require.Equal(t, []domain.ChatMessage{first}, late.Chat.Messages)
 	_, err = service.SetChatHistory(ctx, created.Meeting.Code, false, "wrong")
 	require.ErrorIs(t, err, domain.ErrHostRequired)
-	stale, err := repository.ByCode(ctx, created.Meeting.Code)
-	require.NoError(t, err)
 	_, err = service.SetChatHistory(ctx, created.Meeting.Code, false, created.HostToken)
 	require.NoError(t, err)
-	// A lifecycle update must preserve a concurrently changed setting.
-	require.NoError(t, repository.Update(ctx, stale))
+	// Repeated activation must preserve a concurrently changed setting.
+	_, err = repository.Activate(ctx, created.Meeting.Code, created.Meeting.CreatedAt)
+	require.NoError(t, err)
 	after, err := service.Join(ctx, created.Meeting.Code, domain.JoinMeetingDTO{Name: "New guest"}, "")
 	require.NoError(t, err)
 	require.False(t, after.Chat.HistoryEnabled)

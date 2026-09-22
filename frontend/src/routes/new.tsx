@@ -5,7 +5,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BrandMark } from "@/components/brand-mark"
-import { createMeeting, meetingStorageKey } from "@/lib/api"
+import { APIError, createMeeting, meetingStorageKey } from "@/lib/api"
 
 export const Route = createFileRoute("/new")({ component: NewMeetingPage })
 
@@ -26,7 +26,11 @@ function NewMeetingPage() {
       const result = await createMeeting(title.trim())
       sessionStorage.setItem(meetingStorageKey(result.meeting.code), result.host_token)
       await navigate({ to: "/meet/$code", params: { code: result.meeting.code } })
-    } catch {
+    } catch (error) {
+      if (error instanceof APIError && [413, 429, 503].includes(error.status)) {
+        setError(t("create.serviceBusy"))
+        return
+      }
       const demoCode = `demo-${Math.random().toString(36).slice(2, 8)}`
       sessionStorage.setItem(`roobro:demo:${demoCode}`, title.trim())
       sessionStorage.setItem(meetingStorageKey(demoCode), "demo-host")

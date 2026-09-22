@@ -26,6 +26,7 @@ func NewHandler(service domain.MeetingService, liveKitAPIKey, liveKitAPISecret s
 }
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
+	rg.Use(httpx.RequestLimits())
 	rg.POST("/meetings", h.create)
 	rg.GET("/meetings/:code", h.get)
 	rg.POST("/meetings/:code/join", h.join)
@@ -135,6 +136,7 @@ func analyticsEventFromWebhook(event *lk.WebhookEvent) (string, domain.MeetingAn
 		}
 		analyticsEvent.Kind = domain.MeetingAnalyticsParticipantLeft
 		analyticsEvent.ParticipantIdentity = event.Participant.Identity
+		analyticsEvent.ChatSessionID = event.Participant.Attributes[domain.ChatSessionAttribute]
 	case webhook.EventTrackPublished:
 		if event.Track == nil {
 			return "", domain.MeetingAnalyticsEvent{}, false
@@ -158,6 +160,9 @@ func analyticsEventFromWebhook(event *lk.WebhookEvent) (string, domain.MeetingAn
 
 func respondError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, domain.ErrCapacity), errors.Is(err, domain.ErrRateLimited):
+		c.Header("Retry-After", "5")
+		httpx.Error(c, http.StatusTooManyRequests, "resource_limit", "The meeting service is at its limit. Please try again shortly.")
 	case errors.Is(err, domain.ErrChatUnauthorized):
 		httpx.Error(c, http.StatusUnauthorized, "chat_session_required", "Join the meeting to access chat.")
 	case errors.Is(err, domain.ErrInvalidChatMessage):

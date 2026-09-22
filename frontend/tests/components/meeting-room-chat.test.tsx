@@ -2,7 +2,6 @@
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { RoomEvent } from "livekit-client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -22,6 +21,12 @@ const room = {
     return room
   }),
 }
+const apiMocks = vi.hoisted(() => ({
+  getMeetingChat: vi.fn(),
+  sendMeetingChat: vi.fn(),
+}))
+vi.mock("@/lib/api", async (importOriginal) => ({ ...await importOriginal<object>(), ...apiMocks }))
+
 const soundMocks = vi.hoisted(() => ({
   playMessageReceivedSound: vi.fn(),
   playMessageSentSound: vi.fn(),
@@ -55,7 +60,10 @@ describe("meeting room chat", () => {
   let root: Root
 
   beforeEach(async () => {
+    vi.useFakeTimers()
     vi.clearAllMocks()
+    apiMocks.getMeetingChat.mockResolvedValue({ history_enabled: true, messages: [] })
+    apiMocks.sendMeetingChat.mockResolvedValue({ id: 1, identity: "local-user", name: "Ali", text: "Hello from Ali", sentAt: Date.now() })
     roomListeners.clear()
     container = document.createElement("div")
     document.body.append(container)
@@ -64,6 +72,7 @@ describe("meeting room chat", () => {
       <MeetingRoom
         result={{
           meeting: { id: "meeting-1", code: "ABC123", title: "Test", status: "active", created_at: new Date().toISOString() },
+          chat_token: "chat-token",
           token: "token",
           server_url: "wss://example.test",
           role: "participant",
@@ -85,9 +94,10 @@ describe("meeting room chat", () => {
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
+    vi.useRealTimers()
   })
 
-  it("publishes a reliable chat packet and plays a cue when sending", async () => {
+  it("sends authenticated API chat and plays a cue", async () => {
     const input = container.querySelector<HTMLInputElement>(".chat-form input")
     const form = container.querySelector<HTMLFormElement>(".chat-form")
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
@@ -98,23 +108,18 @@ describe("meeting room chat", () => {
     })
     await act(async () => form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))
 
-    expect(publishData).toHaveBeenCalledOnce()
-    const [payload, options] = publishData.mock.calls[0]
-    expect(options).toEqual({ reliable: true, topic: "roobro-chat" })
-    expect(JSON.parse(new TextDecoder().decode(payload))).toMatchObject({ text: "Hello from Ali" })
+    expect(apiMocks.sendMeetingChat).toHaveBeenCalledWith("ABC123", "chat-token", "Hello from Ali")
+    expect(publishData).not.toHaveBeenCalled()
     expect(soundMocks.playMessageSentSound).toHaveBeenCalledOnce()
     expect(container.querySelector(".message-own")?.textContent).toContain("Hello from Ali")
   })
 
-  it("renders chat packets received from another participant", async () => {
-    const packet = new TextEncoder().encode(JSON.stringify({ text: "Hello from Bajal", sentAt: 1_700_000_000_000 }))
-
-    await act(async () => roomListeners.get(RoomEvent.DataReceived)?.(
-      packet,
-      { identity: "remote-user", name: "Bajal" },
-      undefined,
-      "roobro-chat",
-    ))
+  it("renders chat history returned by an authenticated poll", async () => {
+    apiMocks.getMeetingChat.mockResolvedValue({ history_enabled: true, messages: [
+      { id: 1, identity: "remote-user", name: "Bajal", text: "Hello from Bajal", sentAt: 1_700_000_000_000 },
+    ] })
+    await act(async () => vi.advanceTimersByTimeAsync(1000))
+    expect(apiMocks.getMeetingChat).toHaveBeenCalledWith("ABC123", "chat-token")
 
     expect(container.textContent).toContain("Bajal")
     expect(container.textContent).toContain("Hello from Bajal")
@@ -124,14 +129,10 @@ describe("meeting room chat", () => {
 
   it("shows and clears an unread badge and plays a cue for unseen messages", async () => {
     act(() => container.querySelector<HTMLButtonElement>('.side-controls button[aria-label="room.chat"]')?.click())
-    const packet = new TextEncoder().encode(JSON.stringify({ text: "Are you there?", sentAt: 1_700_000_000_000 }))
-
-    await act(async () => roomListeners.get(RoomEvent.DataReceived)?.(
-      packet,
-      { identity: "remote-user", name: "Bajal" },
-      undefined,
-      "roobro-chat",
-    ))
+    apiMocks.getMeetingChat.mockResolvedValue({ history_enabled: true, messages: [
+      { id: 1, identity: "remote-user", name: "Bajal", text: "Are you there?", sentAt: Date.now() },
+    ] })
+    await act(async () => vi.advanceTimersByTimeAsync(1000))
 
     expect(soundMocks.playMessageReceivedSound).toHaveBeenCalledOnce()
     expect([...container.querySelectorAll(".chat-unread-badge")].map((badge) => badge.textContent)).toEqual(["1", "1"])

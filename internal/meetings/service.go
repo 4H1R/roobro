@@ -34,7 +34,7 @@ func (s *service) Create(ctx context.Context, input domain.CreateMeetingDTO) (*d
 	id := uuid.NewString()
 	code := shortCode()
 	hostToken := secretToken()
-	meeting := &domain.Meeting{ID: id, Code: code, Title: strings.TrimSpace(input.Title), LiveKitRoomName: "roobro-" + id, Status: domain.MeetingCreated, ChatHistoryEnabled: true, HostToken: hostToken, CreatedAt: s.now().UTC()}
+	meeting := &domain.Meeting{ID: id, Code: code, Title: strings.TrimSpace(input.Title), LiveKitRoomName: "roobro-" + id, Status: domain.MeetingCreated, ChatHistoryEnabled: true, HostToken: hostToken, CreatedAt: s.now().UTC(), Demo: !s.livekit.Configured()}
 	if err := s.repository.Create(ctx, meeting); err != nil {
 		return nil, fmt.Errorf("meetings service create: %w", err)
 	}
@@ -65,16 +65,23 @@ func (s *service) Join(ctx context.Context, code string, input domain.JoinMeetin
 		if err := s.livekit.CreateRoom(ctx, meeting.LiveKitRoomName, roomMaxParticipants, roomEmptyTimeout, roomEmptyTimeout); err != nil {
 			return nil, fmt.Errorf("meetings service join: %w", err)
 		}
-		now := s.now().UTC()
-		meeting.Status = domain.MeetingActive
-		meeting.StartedAt = &now
-		if err := s.repository.Update(ctx, meeting); err != nil {
-			return nil, fmt.Errorf("meetings service join update: %w", err)
+		active, err := s.repository.Activate(ctx, meeting.Code, s.now().UTC())
+		if err != nil {
+			// End may have completed while CreateRoom was in flight. Compensate
+			// even if the caller disconnected, using a bounded cleanup context.
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if cleanupErr := s.livekit.DeleteRoom(cleanupCtx, meeting.LiveKitRoomName); cleanupErr != nil {
+				return nil, fmt.Errorf("meetings service activation (%v), cleanup: %w", err, cleanupErr)
+			}
+			return nil, err
 		}
+		meeting = active
 	}
 
 	isHost := hostToken != "" && hostToken == meeting.HostToken
-	token, err := s.livekit.GenerateToken(meeting.LiveKitRoomName, identity, strings.TrimSpace(input.Name), isHost)
+	chatToken := secretToken()
+	token, err := s.livekit.GenerateToken(meeting.LiveKitRoomName, identity, strings.TrimSpace(input.Name), isHost, chatToken)
 	if err != nil {
 		return nil, fmt.Errorf("meetings service token: %w", err)
 	}
@@ -82,7 +89,6 @@ func (s *service) Join(ctx context.Context, code string, input domain.JoinMeetin
 	if isHost {
 		role = "host"
 	}
-	chatToken := secretToken()
 	chat, err := s.repository.OpenChatSession(ctx, meeting.Code, identity, strings.TrimSpace(input.Name), chatToken)
 	if err != nil {
 		return nil, err
@@ -105,10 +111,10 @@ func (s *service) ModerateParticipant(ctx context.Context, code string, input do
 	if err != nil {
 		return err
 	}
-	newlyBanned := input.Ban && !participantIsBanned(meeting, identity)
-	if newlyBanned {
-		meeting.BannedParticipantIdentities = append(meeting.BannedParticipantIdentities, identity)
-		if err := s.repository.Update(ctx, meeting); err != nil {
+	newlyBanned := false
+	if input.Ban {
+		newlyBanned, err = s.repository.BanParticipant(ctx, meeting.Code, identity)
+		if err != nil {
 			return fmt.Errorf("meetings service ban participant: %w", err)
 		}
 	}
@@ -132,14 +138,13 @@ func (s *service) End(ctx context.Context, code, hostToken string) (*domain.Meet
 	if hostToken == "" || hostToken != meeting.HostToken {
 		return nil, domain.ErrHostRequired
 	}
-	if meeting.Status == domain.MeetingEnded {
-		return meeting, nil
+	// Commit terminal state before external deletion. A retry still attempts
+	// deletion if LiveKit was temporarily unavailable on the first call.
+	if err := s.finish(ctx, meeting); err != nil {
+		return nil, err
 	}
 	if err := s.livekit.DeleteRoom(ctx, meeting.LiveKitRoomName); err != nil {
 		return nil, fmt.Errorf("meetings service end room: %w", err)
-	}
-	if err := s.finish(ctx, meeting); err != nil {
-		return nil, err
 	}
 	if err := s.repository.RecordAnalyticsEvent(ctx, meeting.LiveKitRoomName, domain.MeetingAnalyticsEvent{Kind: domain.MeetingAnalyticsRoomFinished}); err != nil {
 		return nil, fmt.Errorf("meetings service finish analytics: %w", err)
@@ -171,10 +176,7 @@ func (s *service) HandleAnalyticsEvent(ctx context.Context, roomName string, eve
 }
 
 func (s *service) finish(ctx context.Context, meeting *domain.Meeting) error {
-	now := s.now().UTC()
-	meeting.Status = domain.MeetingEnded
-	meeting.EndedAt = &now
-	if err := s.repository.Update(ctx, meeting); err != nil {
+	if err := s.repository.Finish(ctx, meeting.Code, s.now().UTC()); err != nil {
 		return fmt.Errorf("meetings service end: %w", err)
 	}
 	return nil
