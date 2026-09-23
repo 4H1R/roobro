@@ -52,6 +52,7 @@ vi.mock("@/components/meeting-room", () => ({
 }))
 
 import { APIError } from "@/lib/api"
+import { ThemeProvider } from "@/components/theme-toggle"
 import { Route } from "@/routes/meet.$code"
 
 const Page = Route.options.component as React.ComponentType
@@ -82,7 +83,7 @@ describe("meeting connection requires Join", () => {
     container.remove()
   })
 
-  const render = async () => { await act(async () => root.render(<Page />)) }
+  const render = async () => { await act(async () => root.render(<ThemeProvider><Page /></ThemeProvider>)) }
   const join = async () => {
     const button = container.querySelector<HTMLButtonElement>(".join-now")
     expect(button?.textContent).toBe("lobby.join")

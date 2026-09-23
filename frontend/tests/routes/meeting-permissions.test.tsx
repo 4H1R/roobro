@@ -24,6 +24,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   removeMeetingParticipant: vi.fn(),
 }))
 
+import { ThemeProvider } from "@/components/theme-toggle"
 import { Route } from "@/routes/meet.$code"
 import { joinMeeting } from "@/lib/api"
 
@@ -54,7 +55,7 @@ describe("meeting permission intro", () => {
     container.remove()
   })
 
-  const render = async () => { await act(async () => root.render(<Page />)) }
+  const render = async () => { await act(async () => root.render(<ThemeProvider><Page /></ThemeProvider>)) }
   const allow = async () => { await act(async () => container.querySelector<HTMLButtonElement>(".join-now")!.click()) }
 
   it("waits for an explicit click, requests both devices, and allows joining after access", async () => {

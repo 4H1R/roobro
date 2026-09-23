@@ -188,11 +188,10 @@ function LiveRoomShell(props: MeetingRoomProps) {
 
 function DemoRoom(props: MeetingRoomProps) {
   const { t } = useTranslation()
-  const shouldReduceMotion = useReducedMotion()
   const stage = (
     <div className="demo-video-grid">
       <div className="demo-self"><span>{props.displayName.slice(0, 1).toUpperCase()}</span><em>{t("room.you")}</em></div>
-      <div className="demo-waiting"><motion.div className="waiting-orbit" animate={shouldReduceMotion ? undefined : { rotate: 360 }} transition={{ duration: 12, ease: "linear", repeat: Infinity }}><Users /></motion.div><strong>{t("room.waiting")}</strong><code dir="ltr">{props.code}</code></div>
+      <div className="demo-waiting"><div className="waiting-orbit"><Users aria-hidden="true" /></div><div className="waiting-copy"><strong>{t("room.waiting")}</strong><code dir="ltr">{props.code}</code></div></div>
     </div>
   )
   return <RoomChrome {...props} stage={stage} live={false} />
@@ -217,6 +216,36 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
   const [activeDevices, setActiveDevices] = useState<Partial<Record<InputDeviceKind, string>>>({})
   const [switchingDevice, setSwitchingDevice] = useState(false)
   const [confirmLeave, setConfirmLeave] = useState(false)
+  const leaveDialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!confirmLeave) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    const dialog = leaveDialogRef.current
+    dialog?.querySelector<HTMLButtonElement>("button")?.focus()
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setConfirmLeave(false)
+      }
+      if (event.key !== "Tab" || !dialog) return
+      const buttons = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"))
+      const first = buttons[0]
+      const last = buttons[buttons.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
+      }
+    }
+    document.addEventListener("keydown", handleKey)
+    return () => {
+      document.removeEventListener("keydown", handleKey)
+      previousFocus?.focus()
+    }
+  }, [confirmLeave])
   const [meetingReadyOpen, setMeetingReadyOpen] = useState(justCreated && result.role === "host")
   const [messages, setMessages] = useState<ChatMessage[]>(() => mergeChatMessages([], (result.chat?.messages ?? []).map((item) => ({ ...item, isOwn: item.identity === result.identity }))))
   const [chatHistoryEnabled, setChatHistoryEnabled] = useState(result.chat?.history_enabled ?? result.meeting.chat_history_enabled ?? true)
@@ -620,7 +649,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
                   const canModerate = result.role === "host" && !participant.isLocal && onModerateParticipant
                   return <div className="people-list" key={participant.identity}><div className="person-avatar">{participantName.slice(0, 1).toUpperCase()}</div><div><strong>{participantName}</strong>{participant.isLocal && <span>{result.role === "host" ? `${t("room.you")} · ${t("room.host")}` : t("room.you")}</span>}</div><div className="participant-actions">{participant.isMicrophoneEnabled ? <Mic /> : <MicOff />}{canModerate && <button className="participant-menu-trigger" aria-label={t("room.participantOptions", { name: participantName })} aria-expanded={participantMenu === participant.identity} onClick={() => setParticipantMenu((current) => current === participant.identity ? null : participant.identity)}><MoreVertical /></button>}</div>{participantMenu === participant.identity && canModerate && <div className="participant-moderation-menu" role="menu"><button role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, false)}><UserMinus />{t("room.removeParticipant")}</button><button className="danger" role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, true)}><Ban />{t("room.banParticipant")}</button></div>}</div>
                 })}</div>}
-                {panel === "chat" && <><small>{t("room.chatRetention")}</small>{result.role === "host" && <label className="chat-history-setting"><input type="checkbox" role="switch" checked={chatHistoryEnabled} disabled={savingChatSetting} onChange={(event) => void toggleChatHistory(event.target.checked)} /><span><strong>{t("room.chatHistory")}</strong><small>{t("room.chatHistoryBody")}</small></span></label>}{chatError && <p className="chat-error" role="alert">{chatError}</p>}<div className="messages">{messages.length === 0 ? <motion.div className="empty-chat" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}><MessageCircle /><span>{t("room.chat")}</span></motion.div> : <AnimatePresence initial={false}>{messages.map((item, index) => <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div><p>{item.text}</p></motion.div>)}</AnimatePresence>}</div><form className="chat-form" onSubmit={send}><input value={message} maxLength={MAX_CHAT_MESSAGE_LENGTH} onChange={(event) => setMessage(event.target.value)} placeholder={t("room.messagePlaceholder")} /><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }} disabled={sendingMessage || !message.trim()} aria-label={t("room.send")}><Send /></motion.button></form></>}
+                {panel === "chat" && <><small>{t("room.chatRetention")}</small>{result.role === "host" && <label className="chat-history-setting"><input type="checkbox" role="switch" checked={chatHistoryEnabled} disabled={savingChatSetting} onChange={(event) => void toggleChatHistory(event.target.checked)} /><span><strong>{t("room.chatHistory")}</strong><small>{t("room.chatHistoryBody")}</small></span></label>}{chatError && <p className="chat-error" role="alert">{chatError}</p>}<div className="messages">{messages.length === 0 ? <motion.div className="empty-chat" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}><MessageCircle /><span>{t("room.chat")}</span></motion.div> : <AnimatePresence initial={false}>{messages.map((item, index) => <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div><p>{item.text}</p></motion.div>)}</AnimatePresence>}</div><form className="chat-form" onSubmit={send}><input aria-label={t("room.messagePlaceholder")} value={message} maxLength={MAX_CHAT_MESSAGE_LENGTH} onChange={(event) => setMessage(event.target.value)} placeholder={t("room.messagePlaceholder")} /><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }} disabled={sendingMessage || !message.trim()} aria-label={t("room.send")}><Send /></motion.button></form></>}
                 {panel === "connection" && <ConnectionStatsPanel diagnostics={diagnostics} demo={!live} />}
                 {panel === "details" && <div className="details-panel"><span>{t("room.details")}</span><code dir="ltr">{code}</code><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }} onClick={() => void copyMeetingDetailsLink(location.href)} aria-live="polite">{detailsCopied ? <><Check />{t("common.copied")}</> : t("room.copyCode")}</motion.button></div>}
               </motion.div>
@@ -644,7 +673,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
               {renderDeviceMenu("videoinput")}
             </div>
           </div>
-          <button className={screenSharing ? "active" : ""} aria-label={t(screenSharing ? "room.stopPresenting" : "room.present")} aria-pressed={screenSharing} disabled={!room} onClick={() => void toggleScreenShare()} title={t(screenSharing ? "room.stopPresenting" : "room.present")}><MonitorUp /></button>
+          <button className={`desktop-secondary-action ${screenSharing ? "active" : ""}`} aria-label={t(screenSharing ? "room.stopPresenting" : "room.present")} aria-pressed={screenSharing} disabled={!room} onClick={() => void toggleScreenShare()} title={t(screenSharing ? "room.stopPresenting" : "room.present")}><MonitorUp /></button>
           <div className="reaction-control" ref={reactionPickerRef}>
             <button className={reactionPickerOpen ? "active" : ""} aria-label={t("room.reactions")} aria-haspopup="menu" aria-controls="reaction-picker" aria-expanded={reactionPickerOpen} onClick={() => { setMobileMenuOpen(false); setReactionPickerOpen((open) => !open) }} title={t("room.reactions")}><SmilePlus /></button>
             <AnimatePresence>
@@ -658,6 +687,9 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
             <button className="mobile-more" aria-label={t("room.more")} aria-haspopup="menu" aria-controls="mobile-actions-menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} title={t("room.more")}><MoreHorizontal /></button>
             <AnimatePresence>
               {mobileMenuOpen && <motion.div id="mobile-actions-menu" className="mobile-actions-menu" role="menu" aria-orientation="vertical" initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}>
+                <button role="menuitem" disabled={!room} onClick={() => { setMobileMenuOpen(false); void toggleScreenShare() }}><MonitorUp /><span>{t(screenSharing ? "room.stopPresenting" : "room.present")}</span></button>
+                <button role="menuitem" onClick={() => { setMobileMenuOpen(false); setDeviceMenu("audioinput") }}><Mic /><span>{t("room.chooseMicrophone")}</span></button>
+                <button role="menuitem" onClick={() => { setMobileMenuOpen(false); setDeviceMenu("videoinput") }}><Video /><span>{t("room.chooseCamera")}</span></button>
                 <button className={panel === "playback" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("playback")}><Music2 /><span>{t("room.playback")}</span></button>
                 <button className={panel === "connection" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("connection")}><Activity /><span>{t("room.connection")}</span></button>
                 <button className={panel === "details" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("details")}><Info /><span>{t("room.details")}</span></button>
@@ -665,7 +697,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
               </motion.div>}
             </AnimatePresence>
           </div>
-          <button className="hangup" onClick={() => setConfirmLeave(true)} title={t("room.leave")}><PhoneOff /></button>
+          <button aria-label={t("room.leave")} className="hangup" onClick={() => setConfirmLeave(true)} title={t("room.leave")}><PhoneOff /></button>
         </div>
         <div className="side-controls desktop-secondary-controls">
           <button aria-label={t("room.playback")} aria-expanded={panel === "playback"} className={panel === "playback" ? "active" : ""} onClick={() => togglePanel("playback")}><Music2 /></button>
@@ -675,7 +707,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
         </div>
       </motion.footer>
       <AnimatePresence>
-        {confirmLeave && <motion.div className="leave-overlay" role="presentation" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><motion.div className="leave-dialog" role="dialog" aria-modal="true" initial={shouldReduceMotion ? false : { opacity: 0, y: 22, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.97 }} transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}><motion.div className="leave-icon" initial={shouldReduceMotion ? false : { rotate: -10, scale: 0.8 }} animate={{ rotate: 0, scale: 1 }} transition={{ ...enterTransition, delay: shouldReduceMotion ? 0 : 0.08 }}><PhoneOff /></motion.div><h2>{t("room.leaveTitle")}</h2><p>{t("room.leaveBody")}</p><div><button onClick={() => setConfirmLeave(false)}>{t("room.stay")}</button><button className="danger" onClick={onLeave}>{t("room.leaveNow")}</button>{result.role === "host" && <button className="danger-outline" onClick={onEnd}>{t("room.end")}</button>}</div></motion.div></motion.div>}
+        {confirmLeave && <motion.div className="leave-overlay" role="presentation" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><motion.div ref={leaveDialogRef} className="leave-dialog" role="dialog" aria-modal="true" aria-labelledby="leave-dialog-title" initial={shouldReduceMotion ? false : { opacity: 0, y: 22, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.97 }} transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}><motion.div className="leave-icon" initial={shouldReduceMotion ? false : { rotate: -10, scale: 0.8 }} animate={{ rotate: 0, scale: 1 }} transition={{ ...enterTransition, delay: shouldReduceMotion ? 0 : 0.08 }}><PhoneOff /></motion.div><h2 id="leave-dialog-title">{t("room.leaveTitle")}</h2><p>{t("room.leaveBody")}</p><div><button onClick={() => setConfirmLeave(false)}>{t("room.stay")}</button><button className="danger" onClick={onLeave}>{t("room.leaveNow")}</button>{result.role === "host" && <button className="danger-outline" onClick={onEnd}>{t("room.end")}</button>}</div></motion.div></motion.div>}
       </AnimatePresence>
     </motion.div>
   )

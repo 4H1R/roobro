@@ -13,6 +13,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock("@/lib/api", async (importOriginal) => ({ ...await importOriginal<object>(), createMeeting: mocks.createMeeting }))
 import { APIError } from "@/lib/api"
+import { ThemeProvider } from "@/components/theme-toggle"
 import { Route } from "@/routes/new"
 const Page = Route.options.component as React.ComponentType
 let root: Root
@@ -23,7 +24,7 @@ beforeEach(async () => {
   container = document.createElement("div")
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => root.render(<Page />))
+  await act(async () => root.render(<ThemeProvider><Page /></ThemeProvider>))
   act(() => {
     const input = container.querySelector("input")!
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Meeting")

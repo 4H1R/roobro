@@ -25,7 +25,7 @@ function readTheme(): Theme {
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
   document.documentElement.style.colorScheme = theme
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#08130f" : "#f7f8f4")
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#1c171f" : "#faf8f7")
 }
 
 export function ThemeProvider({ children }: Readonly<{ children: ReactNode }>) {

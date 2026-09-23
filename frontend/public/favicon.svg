@@ -1,6 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#f7f8f4"/>
-  <path fill="#087a60" d="M15 9h8c5 0 9 4 9 9v3c-6 1-9 4-9 10 0 3 2 6 5 8l-4 4 4 3c-2 2-4 3-7 3h-2l-7 6v-7c-3-1-5-5-5-9V18c0-5 3-9 8-9Z"/>
-  <path fill="#087a60" d="M49 9h-8c-5 0-9 4-9 9v3c6 1 9 4 9 10 0 3-2 6-5 8l4 4-4 3c2 2 4 3 7 3h2l7 6v-7c3-1 5-5 5-9V18c0-5-3-9-8-9Z"/>
-  <circle cx="32" cy="31" r="5" fill="#f26b5e"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><title>رو‌به‌رو — Roo</title><rect width="128" height="128" rx="28" fill="#e3d9ee"/><path fill="#402a43" d="M68 12 91 33C101 43 105 55 102 68 99 83 88 96 73 105 61 112 46 117 36 116 24 116 17 109 17 99 17 89 24 84 35 84L47 84C60 85 71 80 77 71 82 63 81 58 75 52L58 35Z"/></svg>

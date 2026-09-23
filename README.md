@@ -1,7 +1,10 @@
 # رو به رو
 
 <p align="center">
-  <img src="frontend/public/logo.svg" alt="رو به رو" width="88" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="frontend/public/logo-light.svg" />
+    <img src="frontend/public/logo.svg" alt="رو به رو" width="88" />
+  </picture>
 </p>
 
 <p align="center">
@@ -16,7 +19,7 @@
   <a href="docs/deployment.md">Deployment guide</a>
 </p>
 
-![پیش‌نمایش جلسه رو به رو](frontend/public/og.png)
+![رو به رو — هر جا که هستید، رو‌به‌رو باشید](frontend/public/og.png)
 
 ## About
 

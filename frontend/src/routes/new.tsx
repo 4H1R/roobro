@@ -1,10 +1,11 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, LockKeyhole, Video } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BrandMark } from "@/components/brand-mark"
+import { SiteFooter, SiteHeader } from "@/components/site-header"
 import { APIError, createMeeting, meetingStorageKey } from "@/lib/api"
 
 export const Route = createFileRoute("/new")({ component: NewMeetingPage })
@@ -42,25 +43,31 @@ function NewMeetingPage() {
 
   return (
     <motion.main className="create-page" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.3 }}>
-      <motion.header className="simple-header" initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}>
-        <Link to="/" className="brand"><span className="brand-mark"><BrandMark /></span><span>{t("brand.name")}</span></Link>
-        <Link to="/" className="back-link"><ArrowLeft />{t("create.back")}</Link>
-      </motion.header>
+      <SiteHeader back />
+      <div className="create-layout">
+      <aside className="create-guide">
+        <span className="eyebrow">{t("create.eyebrow")}</span>
+        <h2>{t("create.stepTitle")}</h2>
+        <p>{t("create.stepBody")}</p>
+        <ol>{[0, 1, 2].map((step) => <li key={step} aria-current={step === 0 ? "step" : undefined}><span>{["۰۱", "۰۲", "۰۳"][step]}</span><strong>{t(`create.steps.${step}`)}</strong></li>)}</ol>
+        <div className="guide-mark" aria-hidden="true">{t("brand.name")}<BrandMark /></div>
+      </aside>
       <motion.section className="create-card" initial={shouldReduceMotion ? false : { opacity: 0, y: 22, scale: 0.975 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.5, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.22, 1, 0.36, 1] }}>
-        <motion.div className="create-icon" initial={shouldReduceMotion ? false : { rotate: -8, scale: 0.82 }} animate={{ rotate: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}><Video /></motion.div>
-        <div className="eyebrow">{t("create.eyebrow")}</div>
+        <div className="form-kicker"><Video aria-hidden="true" />{t("home.newMeeting")}</div>
         <h1>{t("create.title")}</h1>
         <p>{t("create.body")}</p>
         <form onSubmit={submit}>
           <label htmlFor="meeting-title">{t("create.label")}</label>
           <input id="meeting-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("create.placeholder")} />
-          <AnimatePresence>{error && <motion.span className="form-error" initial={shouldReduceMotion ? false : { opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}>{error}</motion.span>}</AnimatePresence>
+          <AnimatePresence>{error && <motion.span className="form-error" role="alert" initial={shouldReduceMotion ? false : { opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}>{error}</motion.span>}</AnimatePresence>
           <button type="submit" disabled={pending || title.trim().length < 2}>
-            <Video />{pending ? t("create.creating") : t("create.submit")}
+            <span>{pending ? t("create.creating") : t("create.submit")}</span><ArrowLeft aria-hidden="true" />
           </button>
         </form>
         <div className="host-note"><LockKeyhole />{t("create.note")}</div>
       </motion.section>
+      </div>
+      <SiteFooter />
     </motion.main>
   )
 }

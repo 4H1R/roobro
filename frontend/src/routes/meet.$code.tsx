@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandMark } from "@/components/brand-mark"
+import { SiteFooter, SiteHeader } from "@/components/site-header"
 import { MediaPermissionIntro } from "@/components/media-permission-intro"
 import { MeetingRoom } from "@/components/meeting-room"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback"
@@ -150,22 +151,26 @@ function MeetingSession({ code }: { code: string }) {
 
   if (session.status === "room") return <MeetingRoom result={session.result} displayName={session.displayName} code={code} justCreated={session.meeting.status === "created" && session.result.role === "host"} cameraOn={cameraOn} micOn={micOn} onLeave={leave} onEnd={end} onFinished={finished} onModerateParticipant={moderateParticipant} />
   if (state === "loading") return <motion.main className="status-page" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}><motion.div className="loading-mark" animate={shouldReduceMotion ? undefined : { y: [0, -6, 0], scale: [1, 1.03, 1] }} transition={{ duration: 1.8, ease: "easeInOut", repeat: Infinity }}><BrandMark /></motion.div><p>{t("lobby.checking")}</p></motion.main>
-  if (state === "missing" || state === "ended") return <motion.main className="status-page" initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}><motion.div className="status-icon" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.36, delay: shouldReduceMotion ? 0 : 0.08 }}><VideoOff /></motion.div><h1>{state === "ended" ? t("lobby.ended") : t("lobby.notFound")}</h1>{state === "ended" && <p>{t("lobby.endedBody")}</p>}<Link to="/">{t("lobby.goHome")}</Link></motion.main>
+  if (state === "missing" || state === "ended") return <motion.main className="status-page" initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}><motion.div className="status-icon" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.36, delay: shouldReduceMotion ? 0 : 0.08 }}><VideoOff /></motion.div><h1>{state === "ended" ? t("lobby.ended") : t("lobby.notFound")}</h1><p>{t(state === "ended" ? "lobby.endedBody" : "lobby.notFoundBody")}</p><Link to="/">{t("lobby.goHome")}</Link></motion.main>
 
   return (
     <motion.main className="lobby-page" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.3 }}>
-      <motion.header className="lobby-header" initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}><Link to="/" className="brand"><span className="brand-mark"><BrandMark /></span><span>{t("brand.name")}</span></Link><span>{t("lobby.brand")}</span></motion.header>
+      <SiteHeader back />
+      <div className="lobby-heading"><span className="eyebrow">{t("lobby.step")}</span><h2>{meeting?.title}</h2></div>
       <section className="lobby-layout">
+        <div className="preview-column">
         <motion.div className="camera-preview" initial={shouldReduceMotion ? false : { opacity: 0, x: -18, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.48, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.22, 1, 0.36, 1] }}>
           {access.status === "granted" && cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <div className="camera-placeholder"><span>{access.status === "granted" ? name.trim().slice(0,1).toUpperCase() || "r" : <Video />}</span></div>}
-          <div className="preview-title"><strong>{meeting?.title}</strong><code dir="ltr">{code}</code></div>
+          <div className="preview-title"><span className="status-dot" /><strong>{t("lobby.preview")}</strong></div>
           {access.status === "granted" && <div className="preview-toggles">
-            <button className={!micOn ? "off" : ""} onClick={() => setMicOn(!micOn)} title={micOn ? t("lobby.micOn") : t("lobby.micOff")}>{micOn ? <Mic /> : <MicOff />}</button>
-            <button className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} title={cameraOn ? t("lobby.cameraOn") : t("lobby.cameraOff")}>{cameraOn ? <Video /> : <VideoOff />}</button>
+            <button aria-label={micOn ? t("lobby.micOn") : t("lobby.micOff")} aria-pressed={micOn} className={!micOn ? "off" : ""} onClick={() => setMicOn(!micOn)} title={micOn ? t("lobby.micOn") : t("lobby.micOff")}>{micOn ? <Mic /> : <MicOff />}</button>
+            <button aria-label={cameraOn ? t("lobby.cameraOn") : t("lobby.cameraOff")} aria-pressed={cameraOn} className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} title={cameraOn ? t("lobby.cameraOn") : t("lobby.cameraOff")}>{cameraOn ? <Video /> : <VideoOff />}</button>
           </div>}
         </motion.div>
+        <p className="preview-caption"><span>{t("lobby.preview")}</span>{t("lobby.previewNote")}</p>
+        </div>
         <motion.div className="join-card" initial={shouldReduceMotion ? false : { opacity: 0, x: 18, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.48, delay: shouldReduceMotion ? 0 : 0.14, ease: [0.22, 1, 0.36, 1] }}>
-          <div className="guest-chip"><ShieldCheck />{t("lobby.guest")}</div>
+          <div className="guest-chip"><ShieldCheck />{t(sessionStorage.getItem(meetingStorageKey(code)) ? "room.host" : "lobby.guest")}</div>
           {access.status !== "granted" ? <MediaPermissionIntro access={access} onAllow={requestAccess} /> : <>
             <h1>{t("lobby.ready")}</h1>
             <p>{meeting?.title}</p>
@@ -182,6 +187,7 @@ function MeetingSession({ code }: { code: string }) {
           {access.status === "granted" && <div className="safe-note"><ShieldCheck />{t("lobby.safe")}</div>}
         </motion.div>
       </section>
+      <SiteFooter />
     </motion.main>
   )
 }

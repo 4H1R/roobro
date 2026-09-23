@@ -1,6 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">رو به رو</title>
-  <path fill="#087a60" d="M14 6h10c6 0 10 5 10 11v3c-7 1-11 5-11 11 0 4 2 7 6 9l-5 5 5 4c-2 2-5 3-8 3h-3l-8 7v-8c-4-2-6-6-6-11V16C4 10 8 6 14 6Z"/>
-  <path fill="#087a60" d="M50 6H40c-6 0-10 5-10 11v3c7 1 11 5 11 11 0 4-2 7-6 9l5 5-5 4c2 2 5 3 8 3h3l8 7v-8c4-2 6-6 6-11V16c0-6-4-10-10-10Z"/>
-  <circle cx="32" cy="31" r="6" fill="#f26b5e"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><title>رو‌به‌رو — Roo</title><path fill="#402a43" d="M68 12 91 33C101 43 105 55 102 68 99 83 88 96 73 105 61 112 46 117 36 116 24 116 17 109 17 99 17 89 24 84 35 84L47 84C60 85 71 80 77 71 82 63 81 58 75 52L58 35Z"/></svg>
