@@ -31,9 +31,40 @@ The app can also run in an interactive demo mode, so the full meeting flow remai
 - Join realtime rooms powered by LiveKit
 - Use a Persian RTL interface powered by i18next
 - Use in-room video, audio, screen sharing, chat, participant details, and host actions
+- Inspect your connection quality, ping, jitter, packet loss, media rates, and per-stream diagnostics from the connection badge or mobile menu
 - Keep LiveKit token generation and host authorization on the server
 - Explore the product without infrastructure through the built-in demo fallback
 - Use a responsive interface designed for desktop and mobile
+
+## Watch and listen together
+
+Open the music button in the room controls (or the mobile More menu). Each
+participant selects or drops their own copy of the same audio/video file. One
+person starts the shared session, then each person clicks Join playback. Play,
+pause, seek, and ending the session apply to the group; volume stays local.
+Closing the panel keeps playback running.
+
+Use the expand button above the video (or double-click the video) to fill the
+meeting area without restarting playback. Escape or the restore button returns
+it to the sidebar. The participant list shows who has not picked a file, is
+checking a file, has a matching or different copy, or has explicitly joined and
+is ready. Buffering, blocked audio, and stale status updates are shown separately.
+The ready count helps the group decide when to press Play; it does not start or
+block playback automatically. Readiness is specific to each shared session.
+
+The file is never uploaded or transferred. Only its name, size, duration, a
+sampled fingerprint, playback state, and participant readiness travel over LiveKit data packets. The
+fingerprint checks small portions at the start, middle, and end, so it catches
+common mismatches without reading a whole film into memory; it is not a full-file
+integrity check. Files must be playable by each participant's browser. Shared
+URLs and streaming a single participant's file are not part of this version.
+
+The earliest connected participant coordinates controls, using LiveKit join
+times and identity as a tie-breaker. Clients estimate clock offsets, correct
+drift, and request snapshots every two seconds, including after reconnecting.
+Losing the coordinator pauses the timeline until someone resumes. A stalled
+participant catches up when ready rather than pausing the group. Sessions last
+only for the room's connected browsers; demo mode provides local playback only.
 
 ## Tech stack
 

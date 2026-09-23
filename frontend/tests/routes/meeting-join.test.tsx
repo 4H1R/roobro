@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   code: "FIRST",
   getMeeting: vi.fn(),
   joinMeeting: vi.fn(),
+  endMeeting: vi.fn(),
+  removeMeetingParticipant: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),
   toastError: vi.fn(),
@@ -21,25 +23,35 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }))
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...await importOriginal<object>(),
   getMeeting: mocks.getMeeting,
   joinMeeting: mocks.joinMeeting,
   meetingStorageKey: (code: string) => `host:${code}`,
-  endMeeting: vi.fn(),
-  removeMeetingParticipant: vi.fn(),
+  endMeeting: mocks.endMeeting,
+  removeMeetingParticipant: mocks.removeMeetingParticipant,
 }))
 vi.mock("@/lib/meeting-sounds", () => ({ prepareMeetingSounds: vi.fn() }))
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } }))
 vi.mock("@/components/meeting-room", () => ({
-  MeetingRoom: ({ code, displayName }: { code: string; displayName: string }) => {
+  MeetingRoom: ({ code, displayName, onEnd, onModerateParticipant }: {
+    code: string
+    displayName: string
+    onEnd: () => Promise<void>
+    onModerateParticipant: (identity: string, ban: boolean) => Promise<void>
+  }) => {
     useEffect(() => {
       mocks.connect(code)
       return () => { mocks.disconnect(code) }
     }, [code])
-    return <div data-room-audio={code} data-display-name={displayName} />
+    return <div data-room-audio={code} data-display-name={displayName}>
+      <button data-action="end" onClick={() => void onEnd()} />
+      <button data-action="moderate" onClick={() => void onModerateParticipant("user", true).catch(() => {})} />
+    </div>
   },
 }))
 
+import { APIError } from "@/lib/api"
 import { Route } from "@/routes/meet.$code"
 
 const Page = Route.options.component as React.ComponentType
@@ -129,6 +141,41 @@ describe("meeting connection requires Join", () => {
     expect(mocks.toastError).not.toHaveBeenCalled()
     expect(container.querySelector(".join-now")?.textContent).toBe("lobby.join")
     expect(mocks.connect).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [404, "meeting_not_found", "lobby.notFound"],
+    [410, "meeting_ended", "lobby.ended"],
+    [500, "internal_error", "lobby.joinFailed"],
+    [410, "internal_error", "lobby.joinFailed"],
+    [410, undefined, "lobby.ended"],
+  ] as const)("uses a localized toast for Join error HTTP %i (%s)", async (status, code, message) => {
+    mocks.joinMeeting.mockRejectedValue(new APIError("English API error", status, code))
+    await render()
+    await join()
+    expect(mocks.toastError).toHaveBeenCalledWith(message)
+    expect(mocks.connect).not.toHaveBeenCalled()
+  })
+
+  it("shows the ended page when the meeting lookup returns HTTP 410", async () => {
+    mocks.getMeeting.mockRejectedValue(new APIError("This meeting has ended.", 410, "meeting_ended"))
+    await render()
+    expect(container.textContent).toContain("lobby.ended")
+    expect(container.textContent).not.toContain("lobby.notFound")
+  })
+
+  it.each([
+    ["end", 410, "endMeeting", "meeting_ended", "lobby.ended"],
+    ["end", 403, "endMeeting", "host_required", "room.endFailed"],
+    ["moderate", 410, "removeMeetingParticipant", "meeting_ended", "lobby.ended"],
+    ["moderate", 403, "removeMeetingParticipant", "host_required", "room.moderationFailed"],
+  ] as const)("uses a localized toast when %s fails with HTTP %i", async (action, status, request, code, message) => {
+    sessionStorage.setItem("host:FIRST", "host-token")
+    mocks[request].mockRejectedValue(new APIError("English API error", status, code))
+    await render()
+    await join()
+    await act(async () => container.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)?.click())
+    expect(mocks.toastError).toHaveBeenCalledWith(message)
   })
 
   it("stops the local preview when switching meetings during camera startup", async () => {

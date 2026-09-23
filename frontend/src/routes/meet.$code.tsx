@@ -10,12 +10,26 @@ import { MediaPermissionIntro } from "@/components/media-permission-intro"
 import { MeetingRoom } from "@/components/meeting-room"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback"
 import { useLobbyMedia } from "@/hooks/use-lobby-media"
-import { endMeeting, getMeeting, joinMeeting, meetingStorageKey, removeMeetingParticipant, type JoinResult, type Meeting } from "@/lib/api"
+import { APIError, endMeeting, getMeeting, joinMeeting, meetingStorageKey, removeMeetingParticipant, type JoinResult, type Meeting } from "@/lib/api"
 import { prepareMeetingSounds } from "@/lib/meeting-sounds"
 
 export const Route = createFileRoute("/meet/$code")({ component: MeetingPage })
 
 const rememberedNameStorageKey = "roobro:remembered-name"
+
+function meetingErrorState(error: unknown): "ended" | "missing" | null {
+  if (!(error instanceof APIError)) return null
+  switch (error.code ?? error.status) {
+    case "meeting_ended":
+    case 410:
+      return "ended"
+    case "meeting_not_found":
+    case 404:
+      return "missing"
+    default:
+      return null
+  }
+}
 
 type MeetingSessionState =
   | { status: "loading" | "missing" | "ended" }
@@ -41,6 +55,13 @@ function MeetingSession({ code }: { code: string }) {
   const { access, requestAccess, cameraOn, setCameraOn, videoRef, previewUnavailable } = useLobbyMedia(state === "lobby")
   const [joining, setJoining] = useState(false)
   const { copied, copy } = useCopyFeedback()
+  const errorMessage = (error: unknown, fallback: string) => {
+    switch (meetingErrorState(error)) {
+      case "ended": return t("lobby.ended")
+      case "missing": return t("lobby.notFound")
+      default: return t(fallback)
+    }
+  }
 
   useEffect(() => {
     sessionActive.current = true
@@ -65,8 +86,8 @@ function MeetingSession({ code }: { code: string }) {
     getMeeting(code).then((value) => {
       if (cancelled) return
       setSession(value.status === "ended" ? { status: "ended" } : { status: "lobby", meeting: value })
-    }).catch(() => {
-      if (!cancelled) setSession({ status: "missing" })
+    }).catch((error) => {
+      if (!cancelled) setSession({ status: meetingErrorState(error) === "ended" ? "ended" : "missing" })
     })
     return () => { cancelled = true }
   }, [code])
@@ -92,7 +113,7 @@ function MeetingSession({ code }: { code: string }) {
       else localStorage.removeItem(rememberedNameStorageKey)
       setSession({ status: "room", meeting, result, displayName })
     } catch (error) {
-      if (sessionActive.current) toast.error(error instanceof Error ? error.message : t("lobby.notFound"))
+      if (sessionActive.current) toast.error(errorMessage(error, "lobby.joinFailed"))
     } finally {
       if (sessionActive.current) setJoining(false)
     }
@@ -111,7 +132,7 @@ function MeetingSession({ code }: { code: string }) {
       await endMeeting(code, hostToken)
       finished()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("room.endFailed"))
+      toast.error(errorMessage(error, "room.endFailed"))
     }
   }
 
@@ -122,7 +143,7 @@ function MeetingSession({ code }: { code: string }) {
       await removeMeetingParticipant(code, identity, ban, hostToken)
       toast.success(t(ban ? "room.participantBanned" : "room.participantRemoved"))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("room.moderationFailed"))
+      toast.error(errorMessage(error, "room.moderationFailed"))
       throw error
     }
   }

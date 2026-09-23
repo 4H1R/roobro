@@ -11,9 +11,10 @@ vi.mock("@fingerprintjs/fingerprintjs", () => ({ default: { load: fingerprintMoc
 import { joinMeeting, removeMeetingParticipant } from "@/lib/api"
 
 describe("meeting participant identity and moderation API", () => {
-  const fetchMock = vi.fn((_input: string, _init?: RequestInit) => Promise.resolve({
+  const fetchMock = vi.fn(async (_input: string, _init?: RequestInit): Promise<Pick<Response, "ok" | "status" | "json">> => ({
     ok: true,
-    json: () => Promise.resolve({ success: true, data: { removed: true, banned: false } }),
+    status: 200,
+    json: async () => ({ success: true, data: { removed: true, banned: false } }),
   }))
 
   beforeEach(() => {
@@ -38,5 +39,18 @@ describe("meeting participant identity and moderation API", () => {
       headers: expect.objectContaining({ "X-Host-Token": "host-secret" }),
       body: JSON.stringify({ ban: true }),
     }))
+  })
+
+  it("preserves the API error code for localized meeting messages", async () => {
+    fetchMock.mockImplementationOnce(async () => ({
+      ok: false,
+      status: 410,
+      json: async () => ({ success: false, error: { code: "meeting_ended", message: "This meeting has ended." } }),
+    }))
+
+    await expect(joinMeeting("abc-123", "Ali")).rejects.toMatchObject({
+      code: "meeting_ended",
+      status: 410,
+    })
   })
 })

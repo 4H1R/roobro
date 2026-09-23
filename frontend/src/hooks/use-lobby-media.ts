@@ -27,10 +27,15 @@ export function useLobbyMedia(active: boolean) {
   useEffect(() => {
     const generation = ++generationRef.current
     let permissions: PermissionStatus[] = []
-    const revokeAccess = () => {
+    const updateAccess = (event: Event) => {
       if (generationRef.current !== generation) return
-      if (permissions.some((permission) => permission.state !== "granted")) {
+      const changedPermission = event.target as PermissionStatus
+      // Grants can arrive separately. Only the permission that changed can
+      // revoke successful device access; the other status may still be stale.
+      if (changedPermission.state !== "granted") {
         setAccess((current) => current.status === "granted" ? { status: "needed", error: "permissionBlocked" } : current)
+      } else if (!requestingRef.current && permissions.every((permission) => permission.state === "granted")) {
+        setAccess({ status: "granted" })
       }
     }
     const checkAccess = async () => {
@@ -41,7 +46,7 @@ export function useLobbyMedia(active: boolean) {
         ])
         if (generationRef.current !== generation) return
         permissions = result
-        permissions.forEach((permission) => permission.addEventListener?.("change", revokeAccess))
+        permissions.forEach((permission) => permission.addEventListener?.("change", updateAccess))
         setAccess({ status: permissions.every((permission) => permission.state === "granted") ? "granted" : "needed" })
       } catch {
         if (generationRef.current === generation) setAccess({ status: "needed" })
@@ -50,7 +55,7 @@ export function useLobbyMedia(active: boolean) {
     void checkAccess()
     return () => {
       generationRef.current++
-      permissions.forEach((permission) => permission.removeEventListener?.("change", revokeAccess))
+      permissions.forEach((permission) => permission.removeEventListener?.("change", updateAccess))
     }
   }, [])
 

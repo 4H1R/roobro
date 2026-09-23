@@ -1,12 +1,15 @@
 import { ConnectionQualityIndicator, LiveKitRoom, ParticipantName, ParticipantPlaceholder, ParticipantTile, RoomAudioRenderer, useParticipants, useRoomContext, useTracks, VideoTrack } from "@livekit/components-react"
 import { DisconnectReason, RoomEvent, Track, type RemoteParticipant, type Room } from "livekit-client"
-import { Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
+import { Activity, Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, Music2, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import "@livekit/components-styles"
 
+import { SharedPlaybackPanel } from "@/components/shared-playback-panel"
+import { ConnectionStatsPanel, connectionLabel } from "@/components/connection-stats-panel"
+import { useConnectionStats } from "@/hooks/use-connection-stats"
 import { BrandMark } from "@/components/brand-mark"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback"
@@ -203,7 +206,11 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
   const [screenSharing, setScreenSharing] = useState(room?.localParticipant?.isScreenShareEnabled ?? false)
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false)
   const [reactions, setReactions] = useState<MeetingReaction[]>([])
-  const [panel, setPanel] = useState<"people" | "chat" | "details" | null>(null)
+  const [panel, setPanel] = useState<"people" | "chat" | "details" | "connection" | "playback" | null>(null)
+  const [playbackExpanded, setPlaybackExpanded] = useState(false)
+  useEffect(() => { if (panel !== "playback") setPlaybackExpanded(false) }, [panel])
+  const diagnostics = useConnectionStats(room, panel === "connection")
+  const connectionStatus = connectionLabel(diagnostics.connection, diagnostics.quality, !live)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [deviceMenu, setDeviceMenu] = useState<InputDeviceKind | null>(null)
   const [inputDevices, setInputDevices] = useState<Record<InputDeviceKind, MediaDeviceInfo[]>>({ audioinput: [], videoinput: [] })
@@ -324,7 +331,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
           }
         }
       } catch {
-        // Retry on the next poll after a transient connection failure.
+        return
       } finally { if (!stopped) timer = setTimeout(refresh, 1000) }
     }
     void refresh()
@@ -445,7 +452,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
       if (room) await room.localParticipant.setMicrophoneEnabled(enabled)
       setMicOn(enabled)
     } catch {
-      // Keep the control in sync with the published track when access fails.
+      return
     }
   }
 
@@ -455,7 +462,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
       if (room) await room.localParticipant.setCameraEnabled(enabled)
       setCameraOn(enabled)
     } catch {
-      // Keep the control in sync with the published track when access fails.
+      return
     }
   }
 
@@ -466,7 +473,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
       await room.localParticipant.setScreenShareEnabled(enabled)
       setScreenSharing(enabled)
     } catch {
-      // Keep the control unchanged if display capture is unavailable or cancelled.
+      return
     }
   }
 
@@ -478,7 +485,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
       setActiveDevices((current) => ({ ...current, [kind]: deviceId }))
       setDeviceMenu(null)
     } catch {
-      // Leave the current device selected if the browser cannot switch sources.
+      return
     } finally {
       setSwitchingDevice(false)
     }
@@ -575,7 +582,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
             <i aria-hidden="true" />
             <div className="duration-stat"><span>{t("room.yourDuration")}</span><time dir="ltr">{participantDuration}</time></div>
           </div>
-          <div className="connection-state"><motion.span animate={shouldReduceMotion ? undefined : { scale: [1, 1.28, 1], opacity: [1, 0.72, 1] }} transition={{ duration: 2.2, ease: "easeInOut", repeat: Infinity }} />{live ? t("room.connected") : t("room.demo")}</div>
+          <button type="button" className="connection-state" data-quality={connectionStatus} aria-label={t("room.connection")} aria-expanded={panel === "connection"} onClick={() => togglePanel("connection")}><Activity aria-hidden="true" />{t(`connection.${connectionStatus}`)}</button>
           <ThemeToggle />
         </div>
       </motion.header>
@@ -598,10 +605,14 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
             <p className="invite-identity">{t("room.joinedAs", { name: displayName })}</p>
           </motion.aside>}
         </AnimatePresence>
+        <aside className={`room-panel playback-sidebar ${playbackExpanded ? "is-expanded" : ""}`} hidden={panel !== "playback"} data-panel="playback">
+          <div className="panel-title"><strong>{t("room.playback")}</strong><button aria-label={t("playback.close")} onClick={() => setPanel(null)}><X /></button></div>
+          <SharedPlaybackPanel room={room} identity={result.identity} displayName={displayName} expanded={playbackExpanded} onExpandedChange={setPlaybackExpanded} />
+        </aside>
         <AnimatePresence initial={false} mode="popLayout">
-        {panel && (
-          <motion.aside className="room-panel" layout key="room-panel" initial={shouldReduceMotion ? false : { opacity: 0, x: panelOffset, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: panelOffset, scale: 0.985 }} transition={panelTransition}>
-            <div className="panel-title"><strong>{t(`room.${panel}`)}</strong><button onClick={() => setPanel(null)}><X /></button></div>
+        {panel && panel !== "playback" && (
+          <motion.aside className="room-panel" layout key="room-panel" data-panel={panel} initial={shouldReduceMotion ? false : { opacity: 0, x: panelOffset, scale: 0.985 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: panelOffset, scale: 0.985 }} transition={panelTransition}>
+            <div className="panel-title"><strong>{t(`room.${panel}`)}</strong><button aria-label={t("connection.close")} onClick={() => setPanel(null)}><X /></button></div>
             <AnimatePresence mode="wait" initial={false}>
               <motion.div className="panel-content" key={panel} initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: shouldReduceMotion ? 0 : 0.18 }}>
                 {panel === "people" && <div className="people-roster">{roster.map((participant) => {
@@ -610,6 +621,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
                   return <div className="people-list" key={participant.identity}><div className="person-avatar">{participantName.slice(0, 1).toUpperCase()}</div><div><strong>{participantName}</strong>{participant.isLocal && <span>{result.role === "host" ? `${t("room.you")} · ${t("room.host")}` : t("room.you")}</span>}</div><div className="participant-actions">{participant.isMicrophoneEnabled ? <Mic /> : <MicOff />}{canModerate && <button className="participant-menu-trigger" aria-label={t("room.participantOptions", { name: participantName })} aria-expanded={participantMenu === participant.identity} onClick={() => setParticipantMenu((current) => current === participant.identity ? null : participant.identity)}><MoreVertical /></button>}</div>{participantMenu === participant.identity && canModerate && <div className="participant-moderation-menu" role="menu"><button role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, false)}><UserMinus />{t("room.removeParticipant")}</button><button className="danger" role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, true)}><Ban />{t("room.banParticipant")}</button></div>}</div>
                 })}</div>}
                 {panel === "chat" && <><small>{t("room.chatRetention")}</small>{result.role === "host" && <label className="chat-history-setting"><input type="checkbox" role="switch" checked={chatHistoryEnabled} disabled={savingChatSetting} onChange={(event) => void toggleChatHistory(event.target.checked)} /><span><strong>{t("room.chatHistory")}</strong><small>{t("room.chatHistoryBody")}</small></span></label>}{chatError && <p className="chat-error" role="alert">{chatError}</p>}<div className="messages">{messages.length === 0 ? <motion.div className="empty-chat" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}><MessageCircle /><span>{t("room.chat")}</span></motion.div> : <AnimatePresence initial={false}>{messages.map((item, index) => <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div><p>{item.text}</p></motion.div>)}</AnimatePresence>}</div><form className="chat-form" onSubmit={send}><input value={message} maxLength={MAX_CHAT_MESSAGE_LENGTH} onChange={(event) => setMessage(event.target.value)} placeholder={t("room.messagePlaceholder")} /><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }} disabled={sendingMessage || !message.trim()} aria-label={t("room.send")}><Send /></motion.button></form></>}
+                {panel === "connection" && <ConnectionStatsPanel diagnostics={diagnostics} demo={!live} />}
                 {panel === "details" && <div className="details-panel"><span>{t("room.details")}</span><code dir="ltr">{code}</code><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }} onClick={() => void copyMeetingDetailsLink(location.href)} aria-live="polite">{detailsCopied ? <><Check />{t("common.copied")}</> : t("room.copyCode")}</motion.button></div>}
               </motion.div>
             </AnimatePresence>
@@ -646,6 +658,8 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
             <button className="mobile-more" aria-label={t("room.more")} aria-haspopup="menu" aria-controls="mobile-actions-menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} title={t("room.more")}><MoreHorizontal /></button>
             <AnimatePresence>
               {mobileMenuOpen && <motion.div id="mobile-actions-menu" className="mobile-actions-menu" role="menu" aria-orientation="vertical" initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}>
+                <button className={panel === "playback" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("playback")}><Music2 /><span>{t("room.playback")}</span></button>
+                <button className={panel === "connection" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("connection")}><Activity /><span>{t("room.connection")}</span></button>
                 <button className={panel === "details" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("details")}><Info /><span>{t("room.details")}</span></button>
                 <button className={panel === "people" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("people")}><Users /><span>{t("room.people")}</span><em>{participantCount}</em></button>
               </motion.div>}
@@ -654,6 +668,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
           <button className="hangup" onClick={() => setConfirmLeave(true)} title={t("room.leave")}><PhoneOff /></button>
         </div>
         <div className="side-controls desktop-secondary-controls">
+          <button aria-label={t("room.playback")} aria-expanded={panel === "playback"} className={panel === "playback" ? "active" : ""} onClick={() => togglePanel("playback")}><Music2 /></button>
           <button aria-label={t("room.details")} className={panel === "details" ? "active" : ""} onClick={() => togglePanel("details")}><Info /></button>
           <button aria-label={t("room.people")} className={panel === "people" ? "active" : ""} onClick={() => togglePanel("people")}><Users /><span>{participantCount}</span></button>
           <button aria-label={t("room.chat")} className={panel === "chat" ? "active" : ""} onClick={() => togglePanel("chat")}><MessageCircle />{unreadMessageCount > 0 && <span className="chat-unread-badge" aria-label={t("room.unreadMessages", { count: unreadMessageCount })}>{unreadMessageCount > 99 ? "99+" : unreadMessageCount}</span>}</button>

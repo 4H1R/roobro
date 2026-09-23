@@ -55,7 +55,7 @@ interface Envelope<T> {
 }
 
 export class APIError extends Error {
-  constructor(message: string, public readonly status: number) { super(message) }
+  constructor(message: string, public readonly status: number, public readonly code?: string) { super(message) }
 }
 
 const participantIDStorageKey = "roobro:participant-id"
@@ -86,7 +86,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...init?.headers }
   })
   const payload = (await response.json()) as Envelope<T>
-  if (!response.ok || !payload.success || !payload.data) throw new APIError(payload.error?.message ?? "Request failed", response.status)
+  if (!response.ok || !payload.success || !payload.data) throw new APIError(payload.error?.message ?? "Request failed", response.status, payload.error?.code)
   return payload.data
 }
 

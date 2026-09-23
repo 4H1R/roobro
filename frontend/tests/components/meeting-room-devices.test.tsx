@@ -39,6 +39,7 @@ vi.mock("react-i18next", () => ({
   }),
 }))
 
+vi.mock("@/components/shared-playback-panel", () => ({ SharedPlaybackPanel: () => null }))
 vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }))
 vi.mock("@/lib/meeting-sounds", () => ({
   playMessageSentSound: vi.fn(),
