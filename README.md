@@ -82,10 +82,10 @@ only for the room's connected browsers; demo mode provides local playback only.
 
 ## How it works
 
-The frontend image serves the Vite-built React application. An internal Caddy
-gateway routes `/api/*` to the Go API and all other requests to that frontend
-container. The API creates meetings, authorizes hosts, and signs LiveKit access
-tokens; browsers then connect directly to LiveKit for signaling and media.
+The frontend image uses Caddy to serve the Vite-built React application and
+forward `/api/*` and `/health` to the Go API through one HTTP port. Deployers
+provide their own public reverse proxy, domains, and HTTPS configuration. The API
+creates meetings, authorizes hosts, and signs LiveKit access tokens; browsers then connect directly to LiveKit for signaling and media.
 LiveKit sends signed room-lifecycle webhooks back to the API.
 
 ## Local development
@@ -180,7 +180,8 @@ make down        # stop the stack
 
 On a publicly reachable Linux AMD64 or ARM64 server with Docker Compose v2, this
 one-liner downloads the deployment files, generates credentials, and starts the
-frontend, API, LiveKit, and their HTTP gateway.
+frontend, API, and LiveKit containers. The frontend provides one HTTP entry
+point for the web app and API; you control the public reverse proxy and HTTPS.
 
 This first stage is an HTTP smoke deployment. The containers will be ready, but
 remote camera and microphone access requires the DNS/TLS step in the deployment
@@ -242,7 +243,7 @@ requests in flight, 1,000 requests/second globally (burst 2,000), and 200/second
 per TCP peer (burst 400). Per-peer creation allows one every five seconds with
 a burst of 10. Peer-budget bookkeeping is capped at 2,048 entries and idle
 entries expire after five minutes. Forwarding headers cannot change these peer
-budgets: behind the supplied gateway all clients share its peer budget. A public
+budgets: behind the frontend proxy all clients share its peer budget. A public
 proxy can additionally impose per-client limits.
 
 Analytics deduplication sets are capped at 1,024 entries each; when detail cannot

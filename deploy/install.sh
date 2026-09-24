@@ -41,7 +41,6 @@ download_file() {
 }
 
 download_file "${raw_base}/docker-compose.prod.yml" "$compose_file"
-download_file "${raw_base}/deploy/Caddyfile.internal" "${install_dir}/deploy/Caddyfile.internal"
 download_file "${raw_base}/deploy/Caddyfile" "${install_dir}/deploy/Caddyfile"
 
 random_hex() {
