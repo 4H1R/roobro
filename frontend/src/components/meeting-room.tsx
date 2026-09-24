@@ -1,5 +1,5 @@
 import { ConnectionQualityIndicator, LiveKitRoom, ParticipantName, ParticipantPlaceholder, ParticipantTile, RoomAudioRenderer, useParticipants, useRoomContext, useTracks, VideoTrack } from "@livekit/components-react"
-import { DisconnectReason, RoomEvent, Track, type RemoteParticipant, type Room } from "livekit-client"
+import { DisconnectReason, RoomEvent, Track, setLogLevel, type RemoteParticipant, type Room } from "livekit-client"
 import { Activity, Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, Music2, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useEffect, useRef, useState } from "react"
@@ -18,6 +18,9 @@ import { formatElapsedTime } from "@/lib/format-elapsed-time"
 import { mergeChatMessages } from "@/lib/chat-history"
 import { formatMessageTime } from "@/lib/format-message-time"
 import { playMessageReceivedSound, playMessageSentSound, playParticipantJoinedSound, playParticipantLeftSound } from "@/lib/meeting-sounds"
+
+// LiveKit emits recurring WebRTC stats at info level; keep production consoles quiet.
+setLogLevel(import.meta.env.PROD ? "warn" : "info")
 
 const MAX_CHAT_MESSAGE_LENGTH = 2_000
 const REACTION_TOPIC = "roobro-reaction"
