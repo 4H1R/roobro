@@ -16,7 +16,8 @@
   <a href="#local-development">Local development</a> ·
   <a href="#docker-server-deployment">Deploy</a> ·
   <a href="#api">API</a> ·
-  <a href="docs/deployment.md">Deployment guide</a>
+  <a href="docs/deployment.md">Deployment guide</a> ·
+  <a href="docs/seo.md">Search and social previews</a>
 </p>
 
 ![رو به رو — هر جا که هستید، رو‌به‌رو باشید](frontend/public/og.png)

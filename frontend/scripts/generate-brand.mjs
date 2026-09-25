@@ -50,7 +50,7 @@ try {
 
   await screenshot("og.png", {
     style: `body{width:1200px;height:630px;background:${palette.paper};color:${palette.ink};padding:52px;display:grid;grid-template-columns:1.15fr 1fr;gap:52px;align-items:stretch}.copy{display:flex;flex-direction:column;justify-content:center;align-items:flex-start}.lockup{display:flex;align-items:center;gap:12px;color:${palette.plum};font-size:34px;font-weight:850}.lockup i{display:block;width:52px;height:52px}h1{font-size:51px;font-weight:850;line-height:1.65;margin:30px 0 14px}p{font-size:21px;color:${palette.muted};margin:0}footer{margin-top:38px;font-size:17px;color:${palette.plum}}.poster{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;background:${palette.plum};border-radius:4px 4px 74px 4px;color:${palette.lilac};padding:30px}.poster i{display:block;width:310px;height:310px}.poster strong{font-size:25px;font-weight:550}`,
-    body: `<div class="copy"><div class="lockup"><i>${svg(mark)}</i><span>${palette.name}</span></div><h1>هر جا که هستید،<br>رو‌به‌رو باشید.</h1><p>یک جای ساده برای با هم بودن.</p><footer dir="ltr">roobro.ir</footer></div><div class="poster"><i>${svg(recolor(palette.lilac))}</i><strong>فاصله کمتر. گفت‌وگوی بیشتر.</strong></div>`,
+    body: `<div class="copy"><div class="lockup"><i>${svg(mark)}</i><span>${palette.name}</span></div><h1>تماس تصویری<br>و جلسه آنلاین</h1><p>در مرورگر، بدون نصب و ثبت‌نام</p><footer dir="ltr">roobro.ir</footer></div><div class="poster"><i>${svg(recolor(palette.lilac))}</i><strong>فاصله کمتر. گفت‌وگوی بیشتر.</strong></div>`,
   }, 1200, 630)
   const manifest = JSON.parse(readFileSync(join(publicDir, "site.webmanifest"), "utf8"))
   manifest.name = palette.name

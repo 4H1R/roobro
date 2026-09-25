@@ -37,5 +37,5 @@ Exports in `public/`:
 
 The maskable asset has a full-bleed background and extra clearance for launcher
 masks. The favicon has a lilac field so it stays visible on light and dark tabs.
-The asset URLs currently use `v=roo-1`; increment this version in the HTML and
-generator when replacing these cached assets in a future release.
+The social card uses `v=roo-2`; the other asset URLs use `v=roo-1`. Increment the
+corresponding version when replacing cached assets in a future release.

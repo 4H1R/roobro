@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 3000",
-    "build": "vite build",
+    "build": "vite build && bun scripts/prerender.mjs",
     "preview": "vite preview --port 3000",
     "typecheck": "tsc --noEmit",
+    "seo:check": "bun run build && bun scripts/check-seo.mjs",
     "test": "vitest run",
     "brand:generate": "node scripts/generate-brand.mjs"
   },

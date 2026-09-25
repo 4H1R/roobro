@@ -5,15 +5,31 @@
 
 :3000 {
 	encode zstd gzip
+	root * /srv
+	redir /index.html / 308
 
 	@api path /api/* /health
 	handle @api {
+		header X-Robots-Tag "noindex"
 		reverse_proxy api:8080
 	}
 
+	@home path /
+	handle @home {
+		rewrite * /index.html
+		file_server
+	}
+
+	# Crawlers must be able to fetch these pages to see noindex.
+	@app path /new /new/ /meet/* /app.html
+	handle @app {
+		header X-Robots-Tag "noindex"
+		rewrite * /app.html
+		file_server
+	}
+
 	handle {
-		root * /srv
-		try_files {path} /index.html
+		try_files {path} =404
 		file_server
 	}
 }
