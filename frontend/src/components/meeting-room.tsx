@@ -2,7 +2,7 @@ import { ConnectionQualityIndicator, LiveKitRoom, ParticipantName, ParticipantPl
 import { DisconnectReason, RoomEvent, Track, setLogLevel, type RemoteParticipant, type Room } from "livekit-client"
 import { Activity, Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, Music2, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import "@livekit/components-styles"
@@ -198,6 +198,45 @@ function DemoRoom(props: MeetingRoomProps) {
     </div>
   )
   return <RoomChrome {...props} stage={stage} live={false} />
+}
+
+function ChatMessages({ messages }: { messages: ChatMessage[] }) {
+  const { t, i18n } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const followingLatest = useRef(true)
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    if (viewport && followingLatest.current) viewport.scrollTop = viewport.scrollHeight
+  }, [messages])
+
+  return (
+    <div
+      className="messages"
+      ref={viewportRef}
+      onScroll={(event) => {
+        const viewport = event.currentTarget
+        // Remember the position before the next message changes the scroll height.
+        followingLatest.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24
+      }}
+    >
+      {messages.length === 0 ? (
+        <motion.div className="empty-chat" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}>
+          <MessageCircle /><span>{t("room.chat")}</span>
+        </motion.div>
+      ) : (
+        <AnimatePresence initial={false}>
+          {messages.map((item, index) => (
+            <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}>
+              <div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div>
+              <p>{item.text}</p>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      )}
+    </div>
+  )
 }
 
 function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: initialCamera, micOn: initialMic, onLeave, onEnd, onModerateParticipant, stage, live, room, participants = [] }: MeetingRoomProps & { stage: React.ReactNode; live: boolean; room?: Room; participants?: readonly RoomParticipant[] }) {
@@ -652,7 +691,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
                   const canModerate = result.role === "host" && !participant.isLocal && onModerateParticipant
                   return <div className="people-list" key={participant.identity}><div className="person-avatar">{participantName.slice(0, 1).toUpperCase()}</div><div><strong>{participantName}</strong>{participant.isLocal && <span>{result.role === "host" ? `${t("room.you")} · ${t("room.host")}` : t("room.you")}</span>}</div><div className="participant-actions">{participant.isMicrophoneEnabled ? <Mic /> : <MicOff />}{canModerate && <button className="participant-menu-trigger" aria-label={t("room.participantOptions", { name: participantName })} aria-expanded={participantMenu === participant.identity} onClick={() => setParticipantMenu((current) => current === participant.identity ? null : participant.identity)}><MoreVertical /></button>}</div>{participantMenu === participant.identity && canModerate && <div className="participant-moderation-menu" role="menu"><button role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, false)}><UserMinus />{t("room.removeParticipant")}</button><button className="danger" role="menuitem" disabled={moderatingParticipant === participant.identity} onClick={() => void moderateParticipant(participant.identity, true)}><Ban />{t("room.banParticipant")}</button></div>}</div>
                 })}</div>}
-                {panel === "chat" && <><small>{t("room.chatRetention")}</small>{result.role === "host" && <label className="chat-history-setting"><input type="checkbox" role="switch" checked={chatHistoryEnabled} disabled={savingChatSetting} onChange={(event) => void toggleChatHistory(event.target.checked)} /><span><strong>{t("room.chatHistory")}</strong><small>{t("room.chatHistoryBody")}</small></span></label>}{chatError && <p className="chat-error" role="alert">{chatError}</p>}<div className="messages">{messages.length === 0 ? <motion.div className="empty-chat" initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}><MessageCircle /><span>{t("room.chat")}</span></motion.div> : <AnimatePresence initial={false}>{messages.map((item, index) => <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div><p>{item.text}</p></motion.div>)}</AnimatePresence>}</div><form className="chat-form" onSubmit={send}><input aria-label={t("room.messagePlaceholder")} value={message} maxLength={MAX_CHAT_MESSAGE_LENGTH} onChange={(event) => setMessage(event.target.value)} placeholder={t("room.messagePlaceholder")} /><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }} disabled={sendingMessage || !message.trim()} aria-label={t("room.send")}><Send /></motion.button></form></>}
+                {panel === "chat" && <><small>{t("room.chatRetention")}</small>{result.role === "host" && <label className="chat-history-setting"><input type="checkbox" role="switch" checked={chatHistoryEnabled} disabled={savingChatSetting} onChange={(event) => void toggleChatHistory(event.target.checked)} /><span><strong>{t("room.chatHistory")}</strong><small>{t("room.chatHistoryBody")}</small></span></label>}{chatError && <p className="chat-error" role="alert">{chatError}</p>}<ChatMessages messages={messages} /><form className="chat-form" onSubmit={send}><input aria-label={t("room.messagePlaceholder")} value={message} maxLength={MAX_CHAT_MESSAGE_LENGTH} onChange={(event) => setMessage(event.target.value)} placeholder={t("room.messagePlaceholder")} /><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }} disabled={sendingMessage || !message.trim()} aria-label={t("room.send")}><Send /></motion.button></form></>}
                 {panel === "connection" && <ConnectionStatsPanel diagnostics={diagnostics} demo={!live} />}
                 {panel === "details" && <div className="details-panel"><span>{t("room.details")}</span><code dir="ltr">{code}</code><motion.button whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }} onClick={() => void copyMeetingDetailsLink(location.href)} aria-live="polite">{detailsCopied ? <><Check />{t("common.copied")}</> : t("room.copyCode")}</motion.button></div>}
               </motion.div>

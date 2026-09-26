@@ -9,7 +9,6 @@
        url("/fonts/vazirmatn/Vazirmatn.woff2") format("woff2-variations");
 }
 
-/* Shared surfaces, typography and controls across the entire application. */
 :root {
   color-scheme: light;
   --app-font: "Vazirmatn", Tahoma, Arial, sans-serif;
@@ -119,7 +118,6 @@ h1, h2 { text-wrap: balance; }
 .home-feature h2 { margin: 16px 0 8px; font-size: 16px; font-weight: 700; }
 .home-feature p { max-width: 300px; margin: 0; color: var(--muted); font-size: 12px; line-height: 2; }
 
-/* Create and prepare share the same page frame and form language. */
 .create-layout { display: grid; grid-template-columns: 1fr 1.05fr; gap: 100px; align-items: center; padding-block: 64px; flex: 1; }
 .create-guide { display: flex; flex-direction: column; align-self: stretch; min-height: 500px; padding: 40px; border-radius: 4px 4px 72px 4px; background: var(--brand-panel); color: var(--brand-panel-ink); }
 .create-guide .eyebrow { color: var(--brand-panel-muted); }
@@ -260,7 +258,6 @@ h1, h2 { text-wrap: balance; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-/* Meeting workspace */
 .meeting-room, .room-chrome { font-family: var(--app-font); }
 .meeting-room[data-lk-theme] {
   --lk-font-family: var(--app-font);
@@ -483,9 +480,9 @@ h1, h2 { text-wrap: balance; }
 .leave-dialog button.danger-outline { grid-column: 1 / -1; border-color: #f0b7af; color: #c94736; }
 .leave-dialog button.danger:hover { border-color: #d84f3d; background: #d84f3d; color: white; box-shadow: none; }
 .leave-dialog button.danger-outline:hover { border-color: #df7f72; background: #fff2ef; color: #b83b2d; box-shadow: none; }
-.live-video-grid { grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
+.live-video-grid { grid-auto-rows: minmax(0, 1fr); }
 .live-participant { position: relative; min-width: 0; min-height: 0; display: flex; }
-.live-participant > .lk-participant-tile { flex: 1; }
+.live-participant > .lk-participant-tile { flex: 1; min-width: 0; min-height: 0; }
 .focus-tile-button { position: absolute; z-index: 3; top: 12px; right: 12px; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.14); border-radius: 11px; background: rgba(28,19,33,.64); color: white; opacity: 0; box-shadow: none; }
 .live-participant:hover .focus-tile-button, .live-participant:focus-within .focus-tile-button, .focus-tile-button:focus-visible { opacity: 1; }
 .focus-tile-button:hover { transform: translateY(-1px); border-color: rgba(169,128,190,.4); background: #503759; }
@@ -569,9 +566,28 @@ h1, h2 { text-wrap: balance; }
   .shared-playback.is-expanded .playback-lobby { border-inline-start: 0; padding-inline-start: 0; }
   .shared-playback.is-expanded .playback-screen { flex: none; height: clamp(160px, 32vh, 360px); }
 }
-.meeting-room .lk-participant-tile { border: 1px solid rgba(255,255,255,.06); border-radius: 12px !important; overflow: hidden; background: var(--room-surface); }
+.meeting-room .lk-participant-tile { --lk-speaking-indicator-width: 0px; border: 1px solid color-mix(in srgb, var(--room-accent) 55%, var(--room-line)); border-radius: 12px !important; overflow: hidden; background: var(--room-surface); }
+.meeting-room .lk-participant-tile .lk-participant-placeholder svg { width: min(58%, 220px); height: auto; max-height: 62%; padding: 0; }
 .meeting-room .lk-participant-metadata { inset-inline: 10px; bottom: 10px; }
 .meeting-room .lk-participant-metadata-item { gap: 6px; padding: 6px 10px; border: 1px solid rgba(255,255,255,.07); border-radius: 9px; background: rgba(28,19,33,.6); }
+.meeting-room .lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]) .lk-participant-name::before {
+  content: "";
+  display: inline-block;
+  width: 13px;
+  height: 14px;
+  margin-inline-end: 6px;
+  vertical-align: middle;
+  background:
+    linear-gradient(var(--room-accent), var(--room-accent)) 0 100% / 3px 35% no-repeat,
+    linear-gradient(var(--room-accent), var(--room-accent)) 5px 100% / 3px 85% no-repeat,
+    linear-gradient(var(--room-accent), var(--room-accent)) 10px 100% / 3px 55% no-repeat;
+  animation: participant-speaking-bars .9s ease-in-out infinite;
+}
+@keyframes participant-speaking-bars {
+  25% { background-size: 3px 80%, 3px 40%, 3px 90%; }
+  50% { background-size: 3px 50%, 3px 100%, 3px 35%; }
+  75% { background-size: 3px 90%, 3px 55%, 3px 70%; }
+}
 .meeting-room .lk-participant-tile .lk-connection-quality {
   width: 30px;
   height: 26px;
@@ -605,7 +621,6 @@ h1, h2 { text-wrap: balance; }
 .chat-error { padding: 0.75rem 1rem; color: #dc2626; font-size: 0.8rem; }
 .chat-form button:disabled { opacity: 0.5; cursor: default; }
 
-/* LiveKit overlays remain readable over both video and placeholders. */
 html[data-theme="light"] .meeting-room[data-lk-theme] { color-scheme: light; --lk-fg: var(--ink); --lk-border-color: rgba(48,37,52,.11); }
 html[data-theme="light"] .meeting-room .lk-participant-metadata-item { background: var(--card); color: var(--ink); }
 .meeting-room .lk-participant-placeholder path { fill: #a38aaa; fill-opacity: .72; }

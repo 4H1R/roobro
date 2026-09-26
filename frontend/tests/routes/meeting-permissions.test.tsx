@@ -58,7 +58,7 @@ describe("meeting permission intro", () => {
   const render = async () => { await act(async () => root.render(<ThemeProvider><Page /></ThemeProvider>)) }
   const allow = async () => { await act(async () => container.querySelector<HTMLButtonElement>(".join-now")!.click()) }
 
-  it("waits for an explicit click, requests both devices, and allows joining after access", async () => {
+  it("waits for an explicit click, requests only microphone access, and allows joining", async () => {
     localStorage.setItem("roobro:remembered-name", "Ali")
     await render()
     expect(container.textContent).toContain("lobby.permissionTitle")
@@ -67,7 +67,7 @@ describe("meeting permission intro", () => {
     expect(joinMeeting).not.toHaveBeenCalled()
 
     await allow()
-    expect(getUserMedia).toHaveBeenNthCalledWith(1, { video: true, audio: true })
+    expect(getUserMedia).toHaveBeenNthCalledWith(1, { video: false, audio: true })
     expect(stop).toHaveBeenCalledTimes(1)
     expect(container.querySelector("#display-name")).not.toBeNull()
     expect(joinMeeting).not.toHaveBeenCalled()
@@ -76,34 +76,27 @@ describe("meeting permission intro", () => {
     expect(container.querySelector("[data-room]")).not.toBeNull()
   })
 
-  it("skips the intro only when both permissions are already granted", async () => {
+  it("skips the intro when microphone permission is already granted without starting the camera", async () => {
     query.mockResolvedValue({ state: "granted" })
     await render()
-    expect(query).toHaveBeenCalledWith({ name: "camera" })
     expect(query).toHaveBeenCalledWith({ name: "microphone" })
+    expect(query).toHaveBeenCalledTimes(1)
     expect(container.querySelector(".permission-intro")).toBeNull()
-    expect(getUserMedia).toHaveBeenCalledWith({ video: true, audio: false })
+    expect(container.querySelector("video")).toBeNull()
+    expect(getUserMedia).not.toHaveBeenCalled()
   })
 
-  it.each(["camera", "microphone"])("allows joining when %s permission updates first after access succeeds", async (first) => {
+  it("allows joining when microphone permission updates after access succeeds", async () => {
     localStorage.setItem("roobro:remembered-name", "Ali")
-    const cameraPermission = Object.assign(new EventTarget(), { state: "prompt" })
     const microphonePermission = Object.assign(new EventTarget(), { state: "prompt" })
-    query.mockImplementation(async ({ name }: { name: string }) => name === "camera" ? cameraPermission : microphonePermission)
+    query.mockResolvedValue(microphonePermission)
     await render()
     await allow()
 
-    const orderedPermissions = first === "camera"
-      ? [cameraPermission, microphonePermission]
-      : [microphonePermission, cameraPermission]
-    for (const permission of orderedPermissions) {
-      await act(async () => {
-        permission.state = "granted"
-        permission.dispatchEvent(new Event("change"))
-      })
-      expect(container.querySelector('[role="alert"]')).toBeNull()
-      expect(container.querySelector("#display-name")).not.toBeNull()
-    }
+    await act(async () => {
+      microphonePermission.state = "granted"
+      microphonePermission.dispatchEvent(new Event("change"))
+    })
 
     expect(container.querySelector('[role="alert"]')).toBeNull()
     expect(container.querySelector("#display-name")).not.toBeNull()
@@ -112,8 +105,8 @@ describe("meeting permission intro", () => {
     expect(container.querySelector("[data-room]")).not.toBeNull()
   })
 
-  it("shows the intro when only camera access has been granted", async () => {
-    query.mockImplementation(async ({ name }: { name: string }) => ({ state: name === "camera" ? "granted" : "prompt" }))
+  it("shows the intro when microphone access has not been granted", async () => {
+    query.mockResolvedValue({ state: "prompt" })
     await render()
     expect(container.querySelector(".permission-intro")).not.toBeNull()
     expect(getUserMedia).not.toHaveBeenCalled()
@@ -162,12 +155,11 @@ describe("meeting permission intro", () => {
   })
 
   it.each(["denied", "prompt"])("blocks joining when microphone permission becomes %s and recovers when restored", async (state) => {
-    const cameraPermission = new EventTarget()
     const microphonePermission = new EventTarget()
-    Object.assign(cameraPermission, { state: "granted" })
     Object.assign(microphonePermission, { state: "granted" })
-    query.mockImplementation(async ({ name }: { name: string }) => name === "camera" ? cameraPermission : microphonePermission)
+    query.mockResolvedValue(microphonePermission)
     await render()
+    await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click())
     expect(container.querySelector("video")).not.toBeNull()
     await act(async () => {
       Object.assign(microphonePermission, { state })
@@ -189,20 +181,17 @@ describe("meeting permission intro", () => {
   })
 
   it("waits for the device request even if permission events arrive first", async () => {
-    const cameraPermission = Object.assign(new EventTarget(), { state: "prompt" })
     const microphonePermission = Object.assign(new EventTarget(), { state: "prompt" })
-    query.mockImplementation(async ({ name }: { name: string }) => name === "camera" ? cameraPermission : microphonePermission)
+    query.mockResolvedValue(microphonePermission)
     let resolve!: (stream: { getTracks: () => { stop: typeof stop }[] }) => void
     getUserMedia.mockReturnValueOnce(new Promise((done) => { resolve = done }))
     await render()
     await allow()
 
-    for (const permission of [cameraPermission, microphonePermission]) {
-      await act(async () => {
-        permission.state = "granted"
-        permission.dispatchEvent(new Event("change"))
-      })
-    }
+    await act(async () => {
+      microphonePermission.state = "granted"
+      microphonePermission.dispatchEvent(new Event("change"))
+    })
     expect(container.querySelector("#display-name")).toBeNull()
     expect(container.querySelector<HTMLButtonElement>(".join-now")!.disabled).toBe(true)
     expect(getUserMedia).toHaveBeenCalledTimes(1)
@@ -216,6 +205,7 @@ describe("meeting permission intro", () => {
     let resolve!: (stream: { getTracks: () => { stop: typeof stop }[] }) => void
     getUserMedia.mockReturnValueOnce(new Promise((done) => { resolve = done }))
     await render()
+    await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click())
     await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOn"]')!.click())
     await act(async () => resolve({ getTracks: () => [{ stop }] }))
     expect(stop).toHaveBeenCalledTimes(1)
@@ -226,18 +216,31 @@ describe("meeting permission intro", () => {
     query.mockResolvedValue({ state: "granted" })
     getUserMedia.mockRejectedValueOnce(new DOMException("No camera", "NotReadableError"))
     await render()
+    await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click())
     expect(container.querySelector(".permission-note")?.textContent).toBe("lobby.permission")
     await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click())
     expect(container.querySelector(".permission-note")).toBeNull()
     expect(container.querySelector("video")).not.toBeNull()
   })
 
-  it("returns to the intro when preview access is blocked", async () => {
+  it("keeps joining available when camera access is blocked", async () => {
     query.mockResolvedValue({ state: "granted" })
     getUserMedia.mockRejectedValueOnce(new DOMException("Blocked", "SecurityError"))
     await render()
-    expect(container.querySelector("#display-name")).toBeNull()
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("lobby.permissionBlocked")
+    await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click())
+    expect(container.querySelector("#display-name")).not.toBeNull()
+    expect(container.querySelector(".permission-note")?.textContent).toBe("lobby.permission")
+    expect(container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')?.getAttribute("aria-pressed")).toBe("false")
+  })
+
+  it("keeps joining available if camera capture becomes unavailable", async () => {
+    query.mockResolvedValue({ state: "granted" })
+    await render()
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined })
+    await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click())
+    expect(container.querySelector("#display-name")).not.toBeNull()
+    expect(container.querySelector(".permission-note")?.textContent).toBe("lobby.permission")
+    expect(container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')?.getAttribute("aria-pressed")).toBe("false")
   })
 
 })

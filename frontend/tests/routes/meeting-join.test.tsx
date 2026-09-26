@@ -34,9 +34,11 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 vi.mock("@/lib/meeting-sounds", () => ({ prepareMeetingSounds: vi.fn() }))
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } }))
 vi.mock("@/components/meeting-room", () => ({
-  MeetingRoom: ({ code, displayName, onEnd, onModerateParticipant }: {
+  MeetingRoom: ({ code, displayName, cameraOn, micOn, onEnd, onModerateParticipant }: {
     code: string
     displayName: string
+    cameraOn: boolean
+    micOn: boolean
     onEnd: () => Promise<void>
     onModerateParticipant: (identity: string, ban: boolean) => Promise<void>
   }) => {
@@ -44,7 +46,7 @@ vi.mock("@/components/meeting-room", () => ({
       mocks.connect(code)
       return () => { mocks.disconnect(code) }
     }, [code])
-    return <div data-room-audio={code} data-display-name={displayName}>
+    return <div data-room-audio={code} data-display-name={displayName} data-camera-on={cameraOn} data-mic-on={micOn}>
       <button data-action="end" onClick={() => void onEnd()} />
       <button data-action="moderate" onClick={() => void onModerateParticipant("user", true).catch(() => {})} />
     </div>
@@ -81,6 +83,7 @@ describe("meeting connection requires Join", () => {
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
+    vi.restoreAllMocks()
   })
 
   const render = async () => { await act(async () => root.render(<ThemeProvider><Page /></ThemeProvider>)) }
@@ -99,6 +102,31 @@ describe("meeting connection requires Join", () => {
     expect(mocks.joinMeeting).toHaveBeenCalledWith("FIRST", "Ali", undefined)
     expect(mocks.connect).toHaveBeenCalledWith("FIRST")
     expect(container.querySelector("[data-display-name]")?.getAttribute("data-display-name")).toBe("Ali")
+  })
+
+  it("starts with the camera off and microphone on, then joins with those choices", async () => {
+    const getUserMedia = vi.spyOn(navigator.mediaDevices, "getUserMedia")
+    await render()
+    expect(container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')?.getAttribute("aria-pressed")).toBe("false")
+    expect(container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.micOn"]')?.getAttribute("aria-pressed")).toBe("true")
+    expect(container.querySelector(".camera-preview video")).toBeNull()
+    expect(getUserMedia).not.toHaveBeenCalled()
+    await join()
+    expect(container.querySelector("[data-room-audio]")?.getAttribute("data-camera-on")).toBe("false")
+    expect(container.querySelector("[data-room-audio]")?.getAttribute("data-mic-on")).toBe("true")
+  })
+
+  it("keeps media choices changed in the lobby when joining", async () => {
+    await render()
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click()
+      container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.micOn"]')!.click()
+    })
+    expect(container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOn"]')?.getAttribute("aria-pressed")).toBe("true")
+    expect(container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.micOff"]')?.getAttribute("aria-pressed")).toBe("false")
+    await join()
+    expect(container.querySelector("[data-room-audio]")?.getAttribute("data-camera-on")).toBe("true")
+    expect(container.querySelector("[data-room-audio]")?.getAttribute("data-mic-on")).toBe("false")
   })
 
   it("disconnects the previous room immediately when opening another meeting", async () => {
@@ -187,6 +215,7 @@ describe("meeting connection requires Join", () => {
     vi.spyOn(navigator.mediaDevices, "getUserMedia")
       .mockImplementationOnce(() => new Promise((resolve) => { resolvePreview = resolve }))
     await render()
+    await act(async () => container.querySelector<HTMLButtonElement>('.preview-toggles button[title="lobby.cameraOff"]')!.click())
     mocks.code = "SECOND"
     await render()
     await act(async () => resolvePreview(stream))

@@ -18,7 +18,7 @@ function stopStream(stream: MediaStream | null) {
 
 export function useLobbyMedia(active: boolean) {
   const [access, setAccess] = useState<MediaAccess>({ status: "checking" })
-  const [cameraOn, setCameraOn] = useState(true)
+  const [cameraOn, setCameraOn] = useState(false)
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const generationRef = useRef(0)
@@ -26,28 +26,22 @@ export function useLobbyMedia(active: boolean) {
 
   useEffect(() => {
     const generation = ++generationRef.current
-    let permissions: PermissionStatus[] = []
-    const updateAccess = (event: Event) => {
+    let microphonePermission: PermissionStatus | null = null
+    const updateAccess = () => {
       if (generationRef.current !== generation) return
-      const changedPermission = event.target as PermissionStatus
-      // Grants can arrive separately. Only the permission that changed can
-      // revoke successful device access; the other status may still be stale.
-      if (changedPermission.state !== "granted") {
+      if (microphonePermission?.state !== "granted") {
         setAccess((current) => current.status === "granted" ? { status: "needed", error: "permissionBlocked" } : current)
-      } else if (!requestingRef.current && permissions.every((permission) => permission.state === "granted")) {
+      } else if (!requestingRef.current) {
         setAccess({ status: "granted" })
       }
     }
     const checkAccess = async () => {
       try {
-        const result = await Promise.all([
-          navigator.permissions.query({ name: "camera" as PermissionName }),
-          navigator.permissions.query({ name: "microphone" as PermissionName }),
-        ])
+        const result = await navigator.permissions.query({ name: "microphone" as PermissionName })
         if (generationRef.current !== generation) return
-        permissions = result
-        permissions.forEach((permission) => permission.addEventListener?.("change", updateAccess))
-        setAccess({ status: permissions.every((permission) => permission.state === "granted") ? "granted" : "needed" })
+        microphonePermission = result
+        microphonePermission.addEventListener?.("change", updateAccess)
+        setAccess({ status: microphonePermission.state === "granted" ? "granted" : "needed" })
       } catch {
         if (generationRef.current === generation) setAccess({ status: "needed" })
       }
@@ -55,7 +49,7 @@ export function useLobbyMedia(active: boolean) {
     void checkAccess()
     return () => {
       generationRef.current++
-      permissions.forEach((permission) => permission.removeEventListener?.("change", updateAccess))
+      microphonePermission?.removeEventListener?.("change", updateAccess)
     }
   }, [])
 
@@ -69,10 +63,9 @@ export function useLobbyMedia(active: boolean) {
     requestingRef.current = true
     setAccess({ status: "requesting" })
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true })
       stopStream(stream)
       if (generationRef.current !== generation) return
-      setPreviewUnavailable(false)
       setAccess({ status: "granted" })
     } catch (error) {
       if (generationRef.current === generation) setAccess({ status: "needed", error: mediaAccessError(error) })
@@ -86,25 +79,24 @@ export function useLobbyMedia(active: boolean) {
     let cancelled = false
     let stream: MediaStream | null = null
     const video = videoRef.current
+    const disablePreview = () => {
+      if (cancelled) return
+      setPreviewUnavailable(true)
+      setCameraOn(false)
+    }
     const preview = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        disablePreview()
+        return
+      }
       try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setAccess({ status: "needed", error: "mediaUnsupported" })
-          return
-        }
         const result = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         if (cancelled) { stopStream(result); return }
         stream = result
         setPreviewUnavailable(false)
         if (video) video.srcObject = stream
-      } catch (error) {
-        if (cancelled) return
-        if (mediaAccessError(error) === "permissionBlocked") {
-          setAccess({ status: "needed", error: "permissionBlocked" })
-        } else {
-          setPreviewUnavailable(true)
-          setCameraOn(false)
-        }
+      } catch {
+        disablePreview()
       }
     }
     void preview()

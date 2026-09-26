@@ -52,7 +52,7 @@ function MeetingSession({ code }: { code: string }) {
   const meeting = "meeting" in session ? session.meeting : null
   const [name, setName] = useState("")
   const [rememberName, setRememberName] = useState(false)
-  const [micOn, setMicOn] = useState(false)
+  const [micOn, setMicOn] = useState(true)
   const { access, requestAccess, cameraOn, setCameraOn, videoRef, previewUnavailable } = useLobbyMedia(state === "lobby")
   const [joining, setJoining] = useState(false)
   const { copied, copy } = useCopyFeedback()
