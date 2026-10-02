@@ -408,6 +408,8 @@ h1, h2 { text-wrap: balance; }
 .message p { width: fit-content; max-width: 100%; margin: 4px 0 0; padding: 9px 11px; overflow-wrap: anywhere; border-radius: 11px; font-size: 12px; line-height: 1.7; }
 .message-other p { background: var(--surface); color: var(--ink); }
 .message-own p { background: var(--brand); color: var(--on-brand); }
+.message p a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.message-other p a { color: var(--brand); }
 .chat-form { display: flex; align-items: center; gap: 8px; padding: 13px; border-top: 1px solid var(--line); }
 .chat-form input { flex: 1; min-width: 0; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; outline: 0; background: var(--card); color: var(--ink); font-size: 16px; height: 48px; }
 .chat-form input:focus { border-color: var(--brand); box-shadow: none; }

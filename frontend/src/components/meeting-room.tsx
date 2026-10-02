@@ -17,6 +17,7 @@ import { getMeetingChat, meetingStorageKey, sendMeetingChat, setMeetingChatHisto
 import { formatElapsedTime } from "@/lib/format-elapsed-time"
 import { mergeChatMessages } from "@/lib/chat-history"
 import { formatMessageTime } from "@/lib/format-message-time"
+import { linkifyText } from "@/lib/linkify-text"
 import { playMessageReceivedSound, playMessageSentSound, playParticipantJoinedSound, playParticipantLeftSound } from "@/lib/meeting-sounds"
 
 // LiveKit emits recurring WebRTC stats at info level; keep production consoles quiet.
@@ -200,6 +201,10 @@ function DemoRoom(props: MeetingRoomProps) {
   return <RoomChrome {...props} stage={stage} live={false} />
 }
 
+function MessageText({ text }: { text: string }) {
+  return <p>{linkifyText(text).map((segment, index) => segment.type === "link" ? <a key={index} href={segment.href} target="_blank" rel="noopener noreferrer">{segment.text}</a> : segment.text)}</p>
+}
+
 function ChatMessages({ messages }: { messages: ChatMessage[] }) {
   const { t, i18n } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
@@ -230,7 +235,7 @@ function ChatMessages({ messages }: { messages: ChatMessage[] }) {
           {messages.map((item, index) => (
             <motion.div className={`message ${item.isOwn ? "message-own" : "message-other"}`} key={item.id ?? index} initial={shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}>
               <div className="message-meta"><strong>{item.name}</strong><time dateTime={new Date(item.sentAt).toISOString()}>{formatMessageTime(item.sentAt, i18n.language)}</time></div>
-              <p>{item.text}</p>
+              <MessageText text={item.text} />
             </motion.div>
           ))}
         </AnimatePresence>
