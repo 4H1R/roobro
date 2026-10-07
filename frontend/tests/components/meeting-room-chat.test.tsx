@@ -153,9 +153,9 @@ describe("meeting room chat", () => {
     await pollMessages(6)
     scrollTo(viewport, scrolledUp ? 100 : 400)
     apiMocks.sendMeetingChat.mockResolvedValue({ id: 7, identity: "local-user", name: "Ali", text: "New message", sentAt: Date.now() })
-    const input = container.querySelector<HTMLInputElement>(".chat-form input")!
+    const input = container.querySelector<HTMLTextAreaElement>(".chat-form textarea")!
     act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "New message")
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, "New message")
       input.dispatchEvent(new Event("input", { bubbles: true }))
     })
     await act(async () => container.querySelector(".chat-form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))
@@ -163,9 +163,9 @@ describe("meeting room chat", () => {
   })
 
   it("sends authenticated API chat and plays a cue", async () => {
-    const input = container.querySelector<HTMLInputElement>(".chat-form input")
+    const input = container.querySelector<HTMLTextAreaElement>(".chat-form textarea")
     const form = container.querySelector<HTMLFormElement>(".chat-form")
-    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
 
     act(() => {
       setValue?.call(input, "Hello from Ali")
@@ -177,6 +177,24 @@ describe("meeting room chat", () => {
     expect(publishData).not.toHaveBeenCalled()
     expect(soundMocks.playMessageSentSound).toHaveBeenCalledOnce()
     expect(container.querySelector(".message-own")?.textContent).toContain("Hello from Ali")
+  })
+
+  it("sends on Enter and keeps multi-line text entered with Shift+Enter", async () => {
+    apiMocks.sendMeetingChat.mockResolvedValue({ id: 7, identity: "local-user", name: "Ali", text: "First line\nSecond line", sentAt: Date.now() })
+    const input = container.querySelector<HTMLTextAreaElement>(".chat-form textarea")!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, "First line\nSecond line")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    const shiftEnter = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true })
+    await act(async () => input.dispatchEvent(shiftEnter))
+    expect(shiftEnter.defaultPrevented).toBe(false)
+    expect(apiMocks.sendMeetingChat).not.toHaveBeenCalled()
+
+    await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })))
+    expect(apiMocks.sendMeetingChat).toHaveBeenCalledWith("ABC123", "chat-token", "First line\nSecond line")
+    expect(container.querySelector(".message-own p")?.textContent).toBe("First line\nSecond line")
   })
 
   it("renders chat history returned by an authenticated poll", async () => {

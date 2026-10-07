@@ -8,4 +8,8 @@ describe("chat message wrapping", () => {
     expect(styles).toMatch(/\.message p\s*\{[^}]*max-width:\s*100%/)
     expect(styles).toMatch(/\.message p\s*\{[^}]*overflow-wrap:\s*anywhere/)
   })
+
+  it("preserves line breaks typed into a message", () => {
+    expect(styles).toMatch(/\.message p\s*\{[^}]*white-space:\s*pre-wrap/)
+  })
 })
