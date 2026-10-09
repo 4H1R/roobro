@@ -1,4 +1,4 @@
-import { fingerprintMedia, type PlaybackMedia } from "@/lib/shared-playback"
+import { fingerprintMedia, isAudioFileName, type PlaybackMedia } from "@/lib/shared-playback"
 
 export type LocalPlaybackMedia = { url: string; media: PlaybackMedia; audio: boolean }
 
@@ -28,7 +28,7 @@ export async function loadLocalPlaybackMedia(file: File, signal: AbortSignal): P
       probe.src = url
     })
     if (signal.aborted) throw new Error("aborted")
-    return { url, media: { fingerprint, duration, size: file.size, name: file.name.slice(0, 255) || "media" }, audio: file.type.startsWith("audio/") || /\.(mp3|m4a|aac|ogg|oga|wav|flac|opus)$/i.test(file.name) }
+    return { url, media: { fingerprint, duration, size: file.size, name: file.name.slice(0, 255) || "media" }, audio: file.type.startsWith("audio/") || isAudioFileName(file.name) }
   } catch (error) {
     URL.revokeObjectURL(url)
     throw error

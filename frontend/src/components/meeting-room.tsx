@@ -2,8 +2,9 @@ import { ConnectionQualityIndicator, LiveKitRoom, ParticipantName, ParticipantPl
 import { DisconnectReason, RoomEvent, Track, setLogLevel, type RemoteParticipant, type Room } from "livekit-client"
 import { Activity, Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, Music2, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
 import "@livekit/components-styles"
 
@@ -13,6 +14,7 @@ import { useConnectionStats } from "@/hooks/use-connection-stats"
 import { BrandMark } from "@/components/brand-mark"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback"
+import type { PlaybackMedia } from "@/lib/shared-playback"
 import { getMeetingChat, meetingStorageKey, sendMeetingChat, setMeetingChatHistory, type JoinResult, type StoredChatMessage } from "@/lib/api"
 import { formatElapsedTime } from "@/lib/format-elapsed-time"
 import { mergeChatMessages } from "@/lib/chat-history"
@@ -255,6 +257,15 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
   const [panel, setPanel] = useState<"people" | "chat" | "details" | "connection" | "playback" | null>(null)
   const [playbackExpanded, setPlaybackExpanded] = useState(false)
   useEffect(() => { if (panel !== "playback") setPlaybackExpanded(false) }, [panel])
+  const [playbackLive, setPlaybackLive] = useState(false)
+  const playbackPanelVisible = useRef(false)
+  playbackPanelVisible.current = panel === "playback"
+  const announcePlayback = useCallback((media: PlaybackMedia | null) => {
+    setPlaybackLive(!!media)
+    if (media && !playbackPanelVisible.current) {
+      toast(t("playback.startedToast", { name: media.name }), { action: { label: t("playback.open"), onClick: () => setPanel("playback") } })
+    }
+  }, [t])
   const diagnostics = useConnectionStats(room, panel === "connection")
   const connectionStatus = connectionLabel(diagnostics.connection, diagnostics.quality, !live)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -690,7 +701,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
         </AnimatePresence>
         <aside className={`room-panel playback-sidebar ${playbackExpanded ? "is-expanded" : ""}`} hidden={panel !== "playback"} data-panel="playback">
           <div className="panel-title"><strong>{t("room.playback")}</strong><button aria-label={t("playback.close")} onClick={() => setPanel(null)}><X /></button></div>
-          <SharedPlaybackPanel room={room} identity={result.identity} displayName={displayName} expanded={playbackExpanded} onExpandedChange={setPlaybackExpanded} />
+          <SharedPlaybackPanel room={room} identity={result.identity} displayName={displayName} expanded={playbackExpanded} onExpandedChange={setPlaybackExpanded} onSessionChange={announcePlayback} />
         </aside>
         <AnimatePresence initial={false} mode="popLayout">
         {panel && panel !== "playback" && (
@@ -738,13 +749,13 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
           </div>
           <button className={`mobile-panel-action ${panel === "chat" ? "active" : ""}`} aria-label={t("room.chat")} onClick={() => togglePanel("chat")} title={t("room.chat")}><MessageCircle />{unreadMessageCount > 0 && <span className="chat-unread-badge" aria-label={t("room.unreadMessages", { count: unreadMessageCount })}>{unreadMessageCount > 99 ? "99+" : unreadMessageCount}</span>}</button>
           <div className="mobile-more-wrap" ref={mobileMenuRef}>
-            <button className="mobile-more" aria-label={t("room.more")} aria-haspopup="menu" aria-controls="mobile-actions-menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} title={t("room.more")}><MoreHorizontal /></button>
+            <button className="mobile-more" aria-label={t("room.more")} aria-haspopup="menu" aria-controls="mobile-actions-menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} title={t("room.more")}><MoreHorizontal />{playbackLive && panel !== "playback" && <i className="playback-live-dot" aria-hidden="true" />}</button>
             <AnimatePresence>
               {mobileMenuOpen && <motion.div id="mobile-actions-menu" className="mobile-actions-menu" role="menu" aria-orientation="vertical" initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}>
                 <button role="menuitem" disabled={!room} onClick={() => { setMobileMenuOpen(false); void toggleScreenShare() }}><MonitorUp /><span>{t(screenSharing ? "room.stopPresenting" : "room.present")}</span></button>
                 <button role="menuitem" onClick={() => { setMobileMenuOpen(false); setDeviceMenu("audioinput") }}><Mic /><span>{t("room.chooseMicrophone")}</span></button>
                 <button role="menuitem" onClick={() => { setMobileMenuOpen(false); setDeviceMenu("videoinput") }}><Video /><span>{t("room.chooseCamera")}</span></button>
-                <button className={panel === "playback" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("playback")}><Music2 /><span>{t("room.playback")}</span></button>
+                <button className={panel === "playback" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("playback")}><Music2 /><span>{t("room.playback")}</span>{playbackLive && <i className="playback-live-dot" aria-label={t("playback.live")} />}</button>
                 <button className={panel === "connection" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("connection")}><Activity /><span>{t("room.connection")}</span></button>
                 <button className={panel === "details" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("details")}><Info /><span>{t("room.details")}</span></button>
                 <button className={panel === "people" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("people")}><Users /><span>{t("room.people")}</span><em>{participantCount}</em></button>
@@ -754,7 +765,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
           <button aria-label={t("room.leave")} className="hangup" onClick={() => setConfirmLeave(true)} title={t("room.leave")}><PhoneOff /></button>
         </div>
         <div className="side-controls desktop-secondary-controls">
-          <button aria-label={t("room.playback")} aria-expanded={panel === "playback"} className={panel === "playback" ? "active" : ""} onClick={() => togglePanel("playback")}><Music2 /></button>
+          <button aria-label={t("room.playback")} aria-expanded={panel === "playback"} className={panel === "playback" ? "active" : ""} onClick={() => togglePanel("playback")} title={playbackLive ? t("playback.live") : t("room.playback")}><Music2 />{playbackLive && <i className="playback-live-dot" aria-hidden="true" />}</button>
           <button aria-label={t("room.details")} className={panel === "details" ? "active" : ""} onClick={() => togglePanel("details")}><Info /></button>
           <button aria-label={t("room.people")} className={panel === "people" ? "active" : ""} onClick={() => togglePanel("people")}><Users /><span>{participantCount}</span></button>
           <button aria-label={t("room.chat")} className={panel === "chat" ? "active" : ""} onClick={() => togglePanel("chat")}><MessageCircle />{unreadMessageCount > 0 && <span className="chat-unread-badge" aria-label={t("room.unreadMessages", { count: unreadMessageCount })}>{unreadMessageCount > 99 ? "99+" : unreadMessageCount}</span>}</button>

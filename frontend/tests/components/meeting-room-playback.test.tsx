@@ -41,8 +41,8 @@ it("keeps shared playback running across desktop panels and reopens it from the 
     const input = sidebar.querySelector<HTMLInputElement>('input[type="file"]')!
     Object.defineProperty(input, "files", { configurable: true, value: [new File(["film"], "film.mp4")] })
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })))
-    await click(".playback-primary") // Start the room session.
-    await click(".playback-primary") // Join local playback.
+    await click(".playback-primary") // Start the room session; joining follows automatically.
+    expect(container.querySelector('.desktop-secondary-controls button[aria-label="room.playback"] .playback-live-dot')).not.toBeNull()
     await click('button[aria-label="playback.play"]')
     await act(async () => vi.advanceTimersByTime(400))
     expect(paused).toBe(false)

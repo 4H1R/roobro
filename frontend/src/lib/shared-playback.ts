@@ -52,6 +52,10 @@ export function matchesMedia(left: MediaIdentity, right: MediaIdentity) {
   return left.fingerprint === right.fingerprint && left.size === right.size && Math.abs(left.duration - right.duration) < 0.25
 }
 
+export function isAudioFileName(name: string) {
+  return /\.(mp3|m4a|aac|ogg|oga|wav|flac|opus)$/i.test(name)
+}
+
 // Sample bounded portions rather than reading an entire multi-gigabyte film into memory.
 // This is a mismatch check, not a proof that every byte in the files is identical.
 export async function fingerprintMedia(file: File) {

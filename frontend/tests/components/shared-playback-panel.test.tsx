@@ -49,25 +49,46 @@ describe("local shared playback panel", () => {
     vi.useRealTimers()
   })
 
-  it("loads locally, joins explicitly, shares controls and keeps volume individual", async () => {
+  it("loads locally, joins automatically, shares controls and keeps volume individual", async () => {
     await choose()
     expect(loadLocalPlaybackMedia).toHaveBeenCalledWith(expect.any(File), expect.any(AbortSignal))
     expect(container.querySelector('.playback-readiness li')?.getAttribute("data-status")).toBe("selected")
     await click("playback.start")
-    expect(container.querySelector('.playback-readiness li')?.getAttribute("data-status")).toBe("matching")
-    await click("playback.join")
     expect(container.querySelector('.playback-readiness li')?.getAttribute("data-status")).toBe("ready")
+    expect(container.querySelector(".playback-primary")).toBeNull()
     expect(paused).toBe(true)
     await click("playback.play")
     await act(async () => vi.advanceTimersByTime(400))
     expect(paused).toBe(false)
     expect(container.querySelector("video")?.volume).toBe(0.7)
+    await click("playback.mute")
+    expect(container.querySelector("video")?.muted).toBe(true)
+    expect(container.querySelector("video")?.volume).toBe(0.7)
     await click("playback.pause")
     await act(async () => vi.advanceTimersByTime(100))
     expect(paused).toBe(true)
     await click("playback.stop")
-    expect(container.querySelector(".playback-session")).toBeNull()
+    expect(container.querySelector(".playback-session:not(.is-local)")).not.toBeNull()
+    await click("playback.stopNow")
+    expect(container.querySelector(".playback-session:not(.is-local)")).toBeNull()
     expect(container.querySelector("video")?.getAttribute("src")).toBe("blob:film")
+  })
+
+  it("skips the shared timeline for everyone and reports session changes", async () => {
+    const onSessionChange = vi.fn()
+    await act(async () => root.render(<SharedPlaybackPanel identity="self" onSessionChange={onSessionChange} />))
+    await choose()
+    await click("playback.start")
+    expect(onSessionChange).toHaveBeenLastCalledWith(local.media)
+    await click("playback.forward")
+    await act(async () => vi.advanceTimersByTime(400))
+    expect(container.querySelector(".playback-times span")?.textContent).toBe("0:10")
+    await click("playback.back")
+    await act(async () => vi.advanceTimersByTime(400))
+    expect(container.querySelector(".playback-times span")?.textContent).toBe("0:00")
+    await click("playback.stop")
+    await click("playback.stopNow")
+    expect(onSessionChange).toHaveBeenLastCalledWith(null)
   })
 
   it("keeps the player alive when hidden and releases its object URL on unmount", async () => {
@@ -95,9 +116,8 @@ describe("local shared playback panel", () => {
 
   it("offers a gesture retry when audible playback is blocked", async () => {
     await choose()
-    await click("playback.start")
     vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException("Autoplay blocked", "NotAllowedError"))
-    await click("playback.join")
+    await click("playback.start")
     expect(container.textContent).toContain("playback.enableAudio")
     expect(container.querySelector('.playback-readiness li')?.getAttribute("data-status")).toBe("blocked")
     await click("playback.enableAudio")
@@ -106,13 +126,12 @@ describe("local shared playback panel", () => {
 
   it("shows preparation until playback is actually available without interrupting the pending join", async () => {
     await choose()
-    await click("playback.start")
     let finish: () => void = () => undefined
     vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(() => {
       paused = false
       return new Promise<void>((resolve) => { finish = resolve })
     })
-    await click("playback.join")
+    await click("playback.start")
     await act(async () => vi.advanceTimersByTime(500))
     expect(paused).toBe(false)
     expect(container.querySelector('.playback-readiness li')?.getAttribute("data-status")).toBe("buffering")
