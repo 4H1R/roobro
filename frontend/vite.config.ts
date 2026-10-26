@@ -6,8 +6,8 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), tailwindcss(), react()],
-  publicDir: path.resolve(__dirname, "./public"),
-  resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+  publicDir: path.resolve(import.meta.dirname, "./public"),
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   server: {
     host: true,
     port: 3000,
