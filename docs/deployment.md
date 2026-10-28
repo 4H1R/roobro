@@ -1,43 +1,39 @@
-# Deploying Roobro with Docker
+# Deploying Roobro
 
-Roobro runs as three containers:
+Roobro runs as three containers from public GitHub Container Registry images:
 
-- `frontend`: Caddy serves the React/Vite application and forwards `/api/*` and
-  `/health` to the API through one published HTTP port
-- `api`: Go API that creates meetings and signs LiveKit access tokens
-- `livekit`: signaling and WebRTC media server
+| Container | Role |
+| --- | --- |
+| `frontend` | Caddy serving the React app and forwarding `/api/*` and `/health` to the API |
+| `api` | Go API that creates meetings and signs LiveKit tokens (private network only) |
+| `livekit` | Signaling and WebRTC media server |
 
-The application images are public on GitHub Container Registry. A server needs
-Docker, but it does not need the source tree, Bun, Go, or registry credentials.
+The server needs Docker, not the source tree, Bun, Go, or registry credentials.
+You own the public reverse proxy, domains, and TLS. Point your proxy at the
+single application HTTP port; no path routing is needed.
 
-Deployers own the public reverse proxy, domains, and TLS certificates. Point your
-existing Caddy, nginx, Traefik, or load balancer at the application HTTP port; no
-external frontend/API path routing is needed. The API stays on the private Docker
-network. LiveKit signaling has its own proxy upstream, and media ports remain
-directly reachable. `deploy/Caddyfile` is an optional host proxy example; the
-installer does not install or reconfigure your host web server.
+Deployment has two stages:
 
-## Before you start
+1. [Install](#install) an HTTP deployment on the server's IP to check that the
+   stack works.
+2. [Attach a domain and TLS](#attach-a-domain-and-tls). Browsers only allow
+   camera and microphone access over HTTPS, so real meetings need this step.
 
-The automated path supports a publicly reachable Linux AMD64 or ARM64 host with:
+## Requirements
 
-- Docker Engine and Docker Compose v2 with `docker compose up --wait`
+- Publicly reachable Linux AMD64 or ARM64 host
+- Docker Engine and Docker Compose v2 (with `docker compose up --wait`)
 - `curl`, `od`, and `tr`
-- a public IPv4 address, or correct NAT/port forwarding to the host
-- outbound HTTPS access to GitHub, GHCR, Docker Hub, and `api.ipify.org`
+- A public IPv4 address, or NAT/port forwarding to the host
+- Outbound HTTPS to GitHub, GHCR, Docker Hub, and `api.ipify.org`
 
-The one-line bootstrap starts an HTTP deployment for checking the containers and
-networking. Remote browsers require trusted HTTPS before they grant camera and
-microphone access, so attaching DNS and TLS is required for real meetings.
-
-## One-line server bootstrap
+## Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/4H1R/roobro/main/deploy/install.sh | sudo sh
 ```
 
-Because that convenience command executes the current `main` installer as root,
-security-conscious operators should download and inspect it first:
+This runs the current `main` installer as root. To inspect it first:
 
 ```bash
 curl -fsSLo /tmp/roobro-install.sh https://raw.githubusercontent.com/4H1R/roobro/main/deploy/install.sh
@@ -47,41 +43,52 @@ sudo sh /tmp/roobro-install.sh
 
 The installer:
 
-1. Downloads the production Compose file and an optional host Caddy example into
+1. Downloads the production Compose file and an example host Caddyfile into
    `/opt/roobro`.
 2. Detects the server's public IPv4 address.
-3. Generates a LiveKit key and 256-bit secret in `/opt/roobro/.env.prod`.
-4. Pulls and starts the frontend, API, and LiveKit containers.
-5. Waits for the application health checks to pass.
-6. Preserves the existing environment file and credentials when run again.
+3. Generates LiveKit credentials into `/opt/roobro/.env.prod` (mode `0600`).
+4. Pulls and starts the containers, then waits for health checks to pass.
+
+Rerunning it keeps the existing `.env.prod` and credentials.
 
 ### Installer options
 
-Pass options after `sudo env`, so they reach the installer on the other side of
-the pipe:
+Pass options through `sudo env` so they reach the installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/4H1R/roobro/main/deploy/install.sh | sudo env ROOBRO_PUBLIC_HOST=203.0.113.10 sh
 ```
 
-| Variable | Default | Used on reruns? | Purpose |
-| --- | --- | --- | --- |
-| `ROOBRO_INSTALL_DIR` | `/opt/roobro` | Yes | Directory containing Compose, the host proxy example, and `.env.prod`. |
-| `ROOBRO_REF` | `main` | Yes | Git commit or tag from which deployment files are downloaded. It does not select the application image version. |
-| `ROOBRO_PUBLIC_HOST` | detected public IPv4 | Only when creating `.env.prod` | Address placed in the browser-facing URLs. |
-| `ROOBRO_APP_PORT` | `80` | Only when creating `.env.prod` | Public application HTTP port for the IP bootstrap. |
-| `ROOBRO_LIVEKIT_SIGNAL_PORT` | `7880` | Only when creating `.env.prod` | Public HTTP/WebSocket signaling port for the IP bootstrap. |
-| `ROOBRO_LIVEKIT_TCP_PORT` | `7881` | Only when creating `.env.prod` | Public and advertised WebRTC TCP port. |
-| `ROOBRO_LIVEKIT_UDP_PORT` | `7882` | Only when creating `.env.prod` | Public and advertised WebRTC UDP port. |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ROOBRO_INSTALL_DIR` | `/opt/roobro` | Install directory |
+| `ROOBRO_REF` | `main` | Commit or tag to download deployment files from (not the image version) |
+| `ROOBRO_PUBLIC_HOST`\* | detected IPv4 | Address used in browser-facing URLs |
+| `ROOBRO_APP_PORT`\* | `80` | Public application HTTP port |
+| `ROOBRO_LIVEKIT_SIGNAL_PORT`\* | `7880` | Public LiveKit signaling port |
+| `ROOBRO_LIVEKIT_TCP_PORT`\* | `7881` | Public WebRTC TCP port |
+| `ROOBRO_LIVEKIT_UDP_PORT`\* | `7882` | Public WebRTC UDP port |
 
-To pin both the installer and downloaded files, replace `<ref>` with an existing
-commit or release tag:
+\* Only used when `.env.prod` is first created.
+
+To pin both the installer and its files to a commit or release tag:
 
 ```bash
 ref=<ref>; curl -fsSL "https://raw.githubusercontent.com/4H1R/roobro/${ref}/deploy/install.sh" | sudo env ROOBRO_REF="$ref" sh
 ```
 
-## Verify the bootstrap
+### Open the firewall
+
+Allow these inbound ports in the host firewall and any cloud security group:
+
+| Port | Purpose |
+| --- | --- |
+| `80/tcp` | Frontend and API |
+| `7880/tcp` | LiveKit signaling |
+| `7881/tcp` | WebRTC TCP fallback |
+| `7882/udp` | WebRTC media |
+
+### Verify
 
 ```bash
 cd /opt/roobro
@@ -89,28 +96,110 @@ sudo docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 curl -fsS http://SERVER_IP/health
 ```
 
-The frontend and API should report `healthy`, LiveKit should report
-`running` or `healthy`, and the health request should return JSON containing
-`"status":"ok"`. The page should load at `http://SERVER_IP`, but camera and
-microphone access will remain blocked until HTTPS is configured.
+`frontend` and `api` should be `healthy`, `livekit` `running` or `healthy`, and
+the health check should return `"status":"ok"`. The page loads at
+`http://SERVER_IP`, but camera and microphone stay blocked until HTTPS is set up.
 
-For the IP bootstrap, allow these public inbound ports in both the host firewall
-and any cloud security group:
+## Attach a domain and TLS
 
-| Port | Protocol | Purpose |
-| --- | --- | --- |
-| `80` | TCP | Frontend and `/api/*` through the frontend HTTP server |
-| `7880` | TCP | LiveKit HTTP/WebSocket signaling |
-| `7881` | TCP | WebRTC TCP fallback |
-| `7882` | UDP | WebRTC media |
+Point two hostnames at the server, one for the app and one for LiveKit. The
+steps below use Caddy on the host with the Caddyfile the installer downloaded.
+Don't start host Caddy while the HTTP deployment still holds port 80.
 
-## Environment file
+1. Edit `/opt/roobro/.env.prod` to use your hostnames and move the app and
+   signaling ports to loopback:
 
-The installer creates `/opt/roobro/.env.prod` with mode `0600`. A manual
-checkout-based deployment can copy `.env.prod.example` to `.env.prod`. Never
-commit the completed environment file.
+   ```dotenv
+   FRONTEND_URL=https://meet.example.com
+   LIVEKIT_PUBLIC_URL=wss://livekit.example.com
+   APP_BIND_ADDRESS=127.0.0.1
+   APP_PORT=8081
+   LIVEKIT_SIGNAL_BIND_ADDRESS=127.0.0.1
+   LIVEKIT_SIGNAL_PORT=7880
+   ```
 
-A domain/TLS deployment uses:
+2. Recreate the containers:
+
+   ```bash
+   cd /opt/roobro
+   sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 120
+   ```
+
+3. Replace the example hostnames in `deploy/Caddyfile`, then validate and install
+   it. If the server already hosts other sites, merge the site blocks into your
+   existing Caddyfile instead.
+
+   ```bash
+   sudoedit /opt/roobro/deploy/Caddyfile
+   sudo caddy validate --config /opt/roobro/deploy/Caddyfile
+   sudo install -m 0644 /opt/roobro/deploy/Caddyfile /etc/caddy/Caddyfile
+   sudo systemctl enable --now caddy
+   sudo systemctl reload caddy
+   ```
+
+4. Check the health endpoint over TLS, then create and join a real meeting:
+
+   ```bash
+   curl -fsS https://meet.example.com/health
+   ```
+
+5. Update the firewall: allow `80/tcp`, `443/tcp`, `7881/tcp`, and `7882/udp`,
+   and close `7880/tcp`, since Caddy now proxies signaling.
+
+## Update and roll back
+
+Rerun the installer to refresh deployment files, pull images, and wait for
+healthy services. Your `.env.prod` is kept. Check `.env.prod.example` for any
+newly required variables.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/4H1R/roobro/main/deploy/install.sh | sudo sh
+```
+
+To roll back the frontend and API, set `IMAGE_TAG` in `.env.prod` to a known
+short commit SHA and redeploy:
+
+```bash
+cd /opt/roobro
+sudoedit .env.prod
+sudo docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 120
+```
+
+Caddy ships inside the frontend image, so it follows frontend releases. LiveKit
+changes only when you change `LIVEKIT_IMAGE`.
+
+### Migrating from the separate gateway
+
+Older releases ran a separate Caddy gateway container. Pull a frontend image
+that includes API routing before applying the new Compose file, and keep
+`APP_BIND_ADDRESS` and `APP_PORT` unchanged: the frontend now publishes that
+same port, so your external proxy needs no changes. `up --remove-orphans`
+removes the old gateway, with a brief HTTP interruption. `deploy/Caddyfile.internal`
+and `CADDY_IMAGE` are no longer used.
+
+To roll back to a pre-migration release, restore its Compose file and
+`deploy/Caddyfile.internal` along with its images. An older frontend image alone
+cannot forward API requests.
+
+## Manual deployment
+
+From a repository checkout:
+
+```bash
+cp .env.prod.example .env.prod
+$EDITOR .env.prod
+docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet
+docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 120
+```
+
+`config --quiet` fails early if a required value is still blank. Never commit
+the completed `.env.prod`.
+
+## Configuration
+
+A complete `.env.prod` for a domain/TLS deployment:
 
 ```dotenv
 REGISTRY=ghcr.io/4h1r
@@ -129,117 +218,61 @@ LIVEKIT_TCP_PORT=7881
 LIVEKIT_UDP_PORT=7882
 ```
 
-Generate credentials with `openssl rand -hex 8` for the key suffix and
-`openssl rand -hex 32` for the secret, or keep the credentials generated by the
-installer.
+To generate credentials yourself, use `openssl rand -hex 8` for the key suffix
+and `openssl rand -hex 32` for the secret.
 
-### Required application values
+### Required
 
-| Variable | Example | Purpose |
-| --- | --- | --- |
-| `FRONTEND_URL` | `https://meet.example.com` | Exact browser origin allowed by the API's CORS policy, without a trailing slash. |
-| `LIVEKIT_PUBLIC_URL` | `wss://livekit.example.com` | Browser-reachable signaling URL returned with meeting tokens. |
-| `LIVEKIT_API_KEY` | `lk_a1b2c3d4` | Shared API identifier used by the Go API and LiveKit. |
-| `LIVEKIT_API_SECRET` | random 64-character hex | Shared signing secret. Keep it private and stable across redeploys. |
+Compose refuses to start if any of these are empty.
 
-Compose deliberately fails when any required value is empty.
+| Variable | Purpose |
+| --- | --- |
+| `FRONTEND_URL` | Exact browser origin allowed by CORS, without a trailing slash |
+| `LIVEKIT_PUBLIC_URL` | Browser-reachable LiveKit URL (`wss://` in production) |
+| `LIVEKIT_API_KEY` | Key shared by the API and LiveKit |
+| `LIVEKIT_API_SECRET` | Signing secret shared by the API and LiveKit; keep it private and stable |
 
 ### Images
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `REGISTRY` | `ghcr.io/4h1r` | Namespace containing `roobro-backend` and `roobro-frontend`. |
-| `IMAGE_TAG` | `latest` | Version of the Roobro frontend and API images. Use a short commit SHA to pin or roll back the application. |
-| `LIVEKIT_IMAGE` | `livekit/livekit-server:v1.13.6` | Tested LiveKit image; override only for an intentional upgrade. |
+| `REGISTRY` | `ghcr.io/4h1r` | Namespace containing `roobro-backend` and `roobro-frontend` |
+| `IMAGE_TAG` | `latest` | Frontend and API version; use a short commit SHA to pin |
+| `LIVEKIT_IMAGE` | `livekit/livekit-server:v1.13.6` | Tested LiveKit image; override only to upgrade intentionally |
 
-### Bind addresses and ports
+### Ports
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `APP_BIND_ADDRESS` | `127.0.0.1` | Address for the combined frontend/API HTTP entry point. The IP installer uses `0.0.0.0`. |
-| `APP_PORT` | `8081` | Application HTTP port. The IP installer uses `80`. |
-| `LIVEKIT_SIGNAL_BIND_ADDRESS` | `127.0.0.1` | Address for LiveKit signaling. The IP installer uses `0.0.0.0`. |
-| `LIVEKIT_SIGNAL_PORT` | `7880` | Host signaling port. Keep this at `7880` when using the supplied host Caddyfile. |
-| `LIVEKIT_TCP_PORT` | `7881` | Public WebRTC TCP port, configured consistently in Docker and LiveKit. |
-| `LIVEKIT_UDP_PORT` | `7882` | Public WebRTC UDP port, configured consistently in Docker and LiveKit. |
+| Variable | Default | Installer (HTTP) | Purpose |
+| --- | --- | --- | --- |
+| `APP_BIND_ADDRESS` | `127.0.0.1` | `0.0.0.0` | Address for the app's HTTP port |
+| `APP_PORT` | `8081` | `80` | App HTTP port |
+| `LIVEKIT_SIGNAL_BIND_ADDRESS` | `127.0.0.1` | `0.0.0.0` | Address for LiveKit signaling |
+| `LIVEKIT_SIGNAL_PORT` | `7880` | `7880` | Signaling port; keep `7880` with the supplied Caddyfile |
+| `LIVEKIT_TCP_PORT` | `7881` | `7881` | Public WebRTC TCP port |
+| `LIVEKIT_UDP_PORT` | `7882` | `7882` | Public WebRTC UDP port |
 
-When changing a media port, update the corresponding firewall rule as well.
-Compose uses the same value for LiveKit's advertised/listening port and both
-sides of the Docker mapping. `APP_ENV`, the API port, and the private
-`LIVEKIT_HOST` are fixed because they describe the internal container network.
+Media ports are used for both sides of the Docker mapping and as LiveKit's
+advertised port, so update the firewall whenever you change one. `APP_ENV`, the
+API port, and `LIVEKIT_HOST` are fixed by the internal container network.
 
-## Manual Docker Compose deployment
+## Troubleshooting
 
-From a repository checkout:
+| Symptom | Check |
+| --- | --- |
+| Container unhealthy | `sudo docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=200 SERVICE` |
+| Port already allocated | Find the listener with `sudo ss -lntup`, then stop it or change the port |
+| Page loads but no media | Trusted HTTPS, exact `LIVEKIT_PUBLIC_URL`, public `7881/tcp` and `7882/udp`, cloud security groups, NAT rules, and `livekit` logs |
+| Images won't pull | Outbound HTTPS to `ghcr.io`, and both Roobro packages are still public |
+| Caddy can't bind port 80 | Containers were recreated with `APP_BIND_ADDRESS=127.0.0.1` and `APP_PORT=8081` |
 
-```bash
-cp .env.prod.example .env.prod
-$EDITOR .env.prod
-docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet
-docker compose --env-file .env.prod -f docker-compose.prod.yml pull
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 120
-```
+Meetings are stored in memory, so run a single node and expect a restart to
+clear active meetings. See [architecture and limits](architecture.md).
 
-The frontend routing configuration is included in its image; no mounted Caddy
-configuration is needed. The configuration validation command fails early if a
-required value is still blank.
+## Maintainers
 
-## Attach a domain and TLS
+### roobro.ir production
 
-Point an application hostname and a LiveKit hostname at the server, then configure
-your public reverse proxy. The example below uses Caddy on the host. Do not start
-host Caddy while the IP bootstrap still owns public port 80.
-
-The one-line installer already downloaded `/opt/roobro/deploy/Caddyfile`. Complete
-the handoff in this order:
-
-1. Edit `/opt/roobro/.env.prod`:
-
-   ```dotenv
-   FRONTEND_URL=https://meet.example.com
-   LIVEKIT_PUBLIC_URL=wss://livekit.example.com
-   APP_BIND_ADDRESS=127.0.0.1
-   APP_PORT=8081
-   LIVEKIT_SIGNAL_BIND_ADDRESS=127.0.0.1
-   LIVEKIT_SIGNAL_PORT=7880
-   ```
-
-2. Recreate the Compose services first, moving the application and signaling ports
-   from public port 80/7880 to loopback:
-
-   ```bash
-   cd /opt/roobro
-   sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 120
-   ```
-
-3. Replace the two example hostnames in `deploy/Caddyfile`, validate it, and
-   install it. If the server already hosts other sites, merge these site blocks
-   into the existing Caddyfile instead of overwriting it.
-
-   ```bash
-   sudoedit /opt/roobro/deploy/Caddyfile
-   sudo caddy validate --config /opt/roobro/deploy/Caddyfile
-   sudo install -m 0644 /opt/roobro/deploy/Caddyfile /etc/caddy/Caddyfile
-   sudo systemctl enable --now caddy
-   sudo systemctl reload caddy
-   ```
-
-4. Verify the API through TLS, then create and join a real meeting:
-
-   ```bash
-   curl -fsS https://meet.example.com/health
-   ```
-
-For the HTTPS deployment, allow `80/tcp` and `443/tcp` for certificate issuance,
-HTTPS, and redirects, plus `7881/tcp` and `7882/udp` for media. Port `7880` should
-no longer be publicly reachable because host Caddy proxies signaling over
-loopback.
-
-## Roobro production deployment
-
-The public Git checkout is installed at `/opt/roobro` on the production server. This
-deployment uses the public GitHub Container Registry frontend and backend images
-from `docker-compose.prod.yml`:
+The production server runs a Git checkout at `/opt/roobro` and deploys with:
 
 ```bash
 cd /opt/roobro
@@ -247,7 +280,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 180
 ```
 
-The private `.env.prod` contains generated LiveKit credentials and these values:
+Its `.env.prod` holds generated LiveKit credentials and:
 
 ```dotenv
 COMPOSE_PROJECT_NAME=roobro
@@ -261,82 +294,21 @@ LIVEKIT_TCP_PORT=7891
 LIVEKIT_UDP_PORT=7892
 ```
 
-The host Caddyfile imports `/opt/roobro/deploy/Caddyfile.roobro`. UFW
-allows forwarded traffic on `7891/tcp` and `7892/udp` for Roobro media.
-
-In the `roobro.ir` DNS zone, set these records:
+The host Caddyfile imports `/opt/roobro/deploy/Caddyfile.roobro`, and UFW allows
+`7891/tcp` and `7892/udp`. DNS for `roobro.ir`:
 
 | Type | Name | Value |
 | --- | --- | --- |
 | A | `@` | `212.23.201.250` |
 | A | `livekit` | `212.23.201.250` |
 
-Use DNS-only records if the DNS provider offers HTTP proxying. Caddy manages
-public HTTPS certificates once both names resolve to this server. Remove any
-conflicting AAAA records unless IPv6 is configured for this deployment.
+Use DNS-only records (no provider HTTP proxying) and remove conflicting AAAA
+records unless IPv6 is configured. Caddy issues certificates once both names
+resolve.
 
-## Updating and rolling back
+### CI publishing
 
-### Migrating from the separate gateway
-
-Pull a frontend image that includes API routing before applying the new Compose
-file. Keep `APP_BIND_ADDRESS` and `APP_PORT` unchanged: the frontend now publishes
-that same host port directly to container port `3000`. Your external proxy needs
-no routing changes. Use `up --remove-orphans` as shown below so Compose removes
-the old gateway before the frontend takes over its port. This causes a brief HTTP
-interruption. The old `deploy/Caddyfile.internal` file and `CADDY_IMAGE` setting
-are no longer used.
-
-To roll back to a release from before this migration, restore that release's
-Compose file and `deploy/Caddyfile.internal` as well as its application images.
-An older frontend image alone cannot forward API requests with the new topology.
-
-### Routine updates
-
-Rerun the installer to refresh Compose and Caddy deployment files, preserve the
-existing `.env.prod`, pull images, and wait for healthy services:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/4H1R/roobro/main/deploy/install.sh | sudo sh
-```
-
-Review `.env.prod.example` when updating in case a release adds a required
-variable. To roll back only the Roobro frontend and API, set `IMAGE_TAG` to a
-known short commit SHA and rerun:
-
-```bash
-cd /opt/roobro
-sudoedit .env.prod
-sudo docker compose --env-file .env.prod -f docker-compose.prod.yml pull
-sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 120
-```
-
-The frontend image includes Caddy, so its version follows the frontend release.
-Change `LIVEKIT_IMAGE` only when intentionally upgrading or rolling back LiveKit.
-
-## Troubleshooting
-
-- **A container is unhealthy:** run `sudo docker compose --env-file .env.prod -f
-  docker-compose.prod.yml logs --tail=200 SERVICE`.
-- **A port is already allocated:** inspect listeners with `sudo ss -lntup`, then
-  stop the conflicting service or adjust the documented application/signaling port.
-- **The page loads but media does not:** confirm trusted HTTPS, the exact
-  `LIVEKIT_PUBLIC_URL`, public `7881/tcp` and `7882/udp`, cloud security groups,
-  and any NAT/port-forwarding rules. Check the `livekit` logs.
-- **Images cannot be pulled:** verify outbound HTTPS access to `ghcr.io` and that
-  both Roobro packages remain public.
-- **Caddy cannot bind port 80:** confirm Compose was recreated with
-  `APP_BIND_ADDRESS=127.0.0.1` and `APP_PORT=8081` before starting host Caddy.
-
-## Current deployment limitation
-
-The Go API stores meeting state in memory. Restarting the API clears active
-meeting metadata, and multiple API replicas would not share state. Treat the
-current deployment as a single-node setup until a persistent repository is added.
-
-## CI publishing configuration
-
-The GitHub Actions workflow needs no custom secrets or repository variables. It
-uses the built-in `GITHUB_TOKEN` with `packages: write` and publishes public
-AMD64/ARM64 images tagged with `latest` and the short commit SHA. A manual
-workflow dispatch may add one extra release tag.
+The GitHub Actions workflow needs no custom secrets or variables. It uses the
+built-in `GITHUB_TOKEN` with `packages: write` to publish public AMD64/ARM64
+images tagged `latest` and the short commit SHA. A manual dispatch can add one
+extra release tag.
