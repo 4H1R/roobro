@@ -258,3 +258,7 @@ a person using a new identifier.
 
 Issues and pull requests are welcome. Run `make test` and `make front-build`
 before submitting a change.
+
+## License
+
+[MIT](LICENSE)

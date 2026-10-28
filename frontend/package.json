@@ -1,6 +1,7 @@
 {
   "name": "@roobro/web",
   "private": true,
+  "license": "MIT",
   "homepage": "https://roobro.ir",
   "type": "module",
   "scripts": {

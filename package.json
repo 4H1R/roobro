@@ -1,6 +1,7 @@
 {
   "name": "roobro",
   "private": true,
+  "license": "MIT",
   "homepage": "https://roobro.ir",
   "workspaces": ["frontend"],
   "scripts": {
