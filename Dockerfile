@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache git
 ENV GOPROXY=https://proxy.golang.org,direct \
@@ -19,7 +19,7 @@ RUN --mount=type=cache,id=roobro-gobuild,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -tags nomsgpack -ldflags="-w -s" -o /out/api ./cmd/api
 
-FROM alpine:3.24
+FROM alpine:3.24.4
 RUN apk add --no-cache ca-certificates tzdata wget && adduser -D -u 10001 app
 COPY --from=builder /out/api /usr/local/bin/api
 USER app
