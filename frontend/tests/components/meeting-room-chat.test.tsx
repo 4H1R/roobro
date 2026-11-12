@@ -35,6 +35,8 @@ const soundMocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@livekit/components-react", () => ({
+  StartAudio: () => null,
+  useSpeakingParticipants: () => [],
   LiveKitRoom: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   ParticipantTile: () => null,
   RoomAudioRenderer: () => null,

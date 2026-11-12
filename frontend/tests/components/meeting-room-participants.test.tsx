@@ -26,6 +26,8 @@ const room = {
 const soundMocks = vi.hoisted(() => ({ playParticipantJoinedSound: vi.fn(), playParticipantLeftSound: vi.fn() }))
 
 vi.mock("@livekit/components-react", () => ({
+  StartAudio: () => null,
+  useSpeakingParticipants: () => [],
   AudioTrack: () => null,
   ConnectionQualityIndicator: () => null,
   ParticipantName: ({ children, participant }: { children?: React.ReactNode; participant: { name: string } }) => <span>{participant.name}{children}</span>,

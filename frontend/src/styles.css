@@ -186,7 +186,7 @@ h1, h2 { text-wrap: balance; }
 .status-page { min-height: 100dvh; display: grid; align-content: center; justify-items: center; gap: 18px; padding: 32px; background: var(--paper); text-align: center; }
 .status-page h1 { margin: 6px 0 0; font-size: clamp(26px, 5vw, 36px); font-weight: 750; line-height: 1.65; }
 .status-page p { max-width: 420px; margin: 0; color: var(--muted); font-size: 14px; line-height: 2; }
-.status-page a { min-height: 48px; margin-top: 10px; padding: 12px 24px; border-radius: 8px; background: var(--brand); color: var(--on-brand); text-decoration: none; font-size: 13px; font-weight: 600; }
+.status-page a, .status-page .status-page-action { min-height: 48px; margin-top: 10px; padding: 12px 24px; border: 0; border-radius: 8px; background: var(--brand); color: var(--on-brand); text-decoration: none; font-size: 13px; font-weight: 600; cursor: pointer; }
 .loading-mark, .status-icon { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand); }
 .loading-mark .brand-mark { width: 40px; height: 40px; }
 .status-icon svg { width: 28px; height: 28px; }
@@ -258,8 +258,8 @@ h1, h2 { text-wrap: balance; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-.meeting-room, .room-chrome { font-family: var(--app-font); }
-.meeting-room[data-lk-theme] {
+.meeting-room, .room-chrome, .meeting-pip { font-family: var(--app-font); }
+.meeting-room[data-lk-theme], .meeting-pip[data-lk-theme] {
   --lk-font-family: var(--app-font);
   --lk-bg: var(--paper);
   --lk-bg2: var(--surface);
@@ -708,6 +708,8 @@ html[data-theme="dark"] .playback-ready-summary.all-ready { color: #8fe0c2; }
 
 html[data-theme="light"] .meeting-room[data-lk-theme] { color-scheme: light; --lk-fg: var(--ink); --lk-border-color: rgba(48,37,52,.11); }
 html[data-theme="light"] .meeting-room .lk-participant-metadata-item { background: var(--card); color: var(--ink); }
+html[data-theme="light"] .meeting-pip[data-lk-theme] { color-scheme: light; --lk-fg: var(--ink); --lk-border-color: rgba(48,37,52,.11); }
+html[data-theme="light"] .meeting-pip .lk-participant-metadata-item { background: var(--card); color: var(--ink); }
 .meeting-room .lk-participant-placeholder path { fill: #a38aaa; fill-opacity: .72; }
 html[data-theme="light"] .meeting-room .lk-connection-quality[data-lk-quality="excellent"] { color: #087c61; }
 html[data-theme="light"] .meeting-room .lk-connection-quality[data-lk-quality="good"] { color: #a05f00; }
@@ -793,3 +795,21 @@ html[data-theme="light"] .meeting-room .lk-connection-quality[data-lk-quality="u
   .demo-self > span { width: 80px; height: 80px; font-size: 32px; }
   .room-panel { inset-block: 4px; }
 }
+
+.meeting-start-audio.lk-start-audio-button { position: fixed; inset-block-start: 88px; inset-inline-start: 50%; z-index: 60; translate: -50% 0; border-radius: 99px; padding: 10px 20px; background: var(--brand); color: var(--on-brand); font-size: 13px; font-weight: 700; box-shadow: 0 10px 30px rgba(28,23,31,.24); }
+[dir="rtl"] .meeting-start-audio.lk-start-audio-button { translate: 50% 0; }
+
+body.meeting-pip-body { margin: 0; overflow: hidden; background: var(--paper); }
+.meeting-pip { position: relative; height: 100vh; display: grid; grid-template-rows: minmax(0, 1fr); background: var(--paper); color: var(--ink); }
+.meeting-pip-stage { position: relative; display: flex; min-height: 0; padding: 6px; }
+.meeting-pip-stage > .lk-participant-tile { flex: 1; min-width: 0; min-height: 0; }
+.meeting-pip-avatar { flex: 1; display: grid; place-items: center; border-radius: .75rem; background: var(--surface); }
+.meeting-pip-avatar > span { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-size: 26px; font-weight: 750; }
+.meeting-pip-controls { position: absolute; inset-inline: 0; inset-block-end: 14px; display: flex; justify-content: center; gap: 8px; opacity: 0; transition: opacity .18s ease; }
+.meeting-pip:hover .meeting-pip-controls, .meeting-pip:focus-within .meeting-pip-controls { opacity: 1; }
+.meeting-pip-controls button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); cursor: pointer; }
+.meeting-pip-controls button svg { width: 18px; height: 18px; }
+.meeting-pip-controls button.control-off { background: var(--surface); color: var(--muted); }
+.meeting-pip-controls button.hangup { width: 52px; border-color: transparent; background: #c94c3e; color: white; }
+.meeting-pip-controls button:focus-visible { outline: 3px solid rgba(169,128,190,.4); outline-offset: 2px; }
+@media (hover: none) { .meeting-pip-controls { opacity: 1; } }

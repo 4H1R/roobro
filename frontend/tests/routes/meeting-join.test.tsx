@@ -15,11 +15,12 @@ const mocks = vi.hoisted(() => ({
   connect: vi.fn(),
   disconnect: vi.fn(),
   toastError: vi.fn(),
+  navigate: vi.fn(),
 }))
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: { component: React.ComponentType }) => ({ options, useParams: () => ({ code: mocks.code }) }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }))
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
@@ -34,12 +35,15 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 vi.mock("@/lib/meeting-sounds", () => ({ prepareMeetingSounds: vi.fn() }))
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } }))
 vi.mock("@/components/meeting-room", () => ({
-  MeetingRoom: ({ code, displayName, cameraOn, micOn, onEnd, onModerateParticipant }: {
+  MeetingRoom: ({ code, displayName, cameraOn, micOn, onEnd, onLeave, onConnectionLost, onMediaChange, onModerateParticipant }: {
     code: string
     displayName: string
     cameraOn: boolean
     micOn: boolean
     onEnd: () => Promise<void>
+    onLeave: () => void
+    onConnectionLost: () => void
+    onMediaChange: (media: { micOn: boolean; cameraOn: boolean }) => void
     onModerateParticipant: (identity: string, ban: boolean) => Promise<void>
   }) => {
     useEffect(() => {
@@ -48,6 +52,9 @@ vi.mock("@/components/meeting-room", () => ({
     }, [code])
     return <div data-room-audio={code} data-display-name={displayName} data-camera-on={cameraOn} data-mic-on={micOn}>
       <button data-action="end" onClick={() => void onEnd()} />
+      <button data-action="leave" onClick={onLeave} />
+      <button data-action="lose-connection" onClick={onConnectionLost} />
+      <button data-action="camera-on" onClick={() => onMediaChange({ micOn, cameraOn: true })} />
       <button data-action="moderate" onClick={() => void onModerateParticipant("user", true).catch(() => {})} />
     </div>
   },
@@ -221,5 +228,93 @@ describe("meeting connection requires Join", () => {
     await act(async () => resolvePreview(stream))
     expect(stop).toHaveBeenCalledOnce()
     expect(mocks.connect).not.toHaveBeenCalled()
+  })
+
+  describe("staying in the call after the connection drops", () => {
+    const resumeKey = "roobro:resume:FIRST"
+    const click = async (action: string) => {
+      await act(async () => container.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!.click())
+    }
+
+    it("fetches a fresh token and reconnects with the current media choices", async () => {
+      await render()
+      await join()
+      await click("camera-on")
+      await click("lose-connection")
+      expect(mocks.joinMeeting).toHaveBeenCalledTimes(2)
+      expect(mocks.disconnect).toHaveBeenCalledWith("FIRST")
+      expect(mocks.connect).toHaveBeenCalledTimes(2)
+      expect(container.querySelector("[data-room-audio]")?.getAttribute("data-camera-on")).toBe("true")
+    })
+
+    it("keeps retrying through transient failures while showing a rejoining screen", async () => {
+      vi.useFakeTimers()
+      try {
+        await render()
+        await join()
+        mocks.joinMeeting.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        await click("lose-connection")
+        expect(container.textContent).toContain("room.rejoining")
+        expect(container.querySelector("[data-room-audio]")).toBeNull()
+        await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+        expect(mocks.joinMeeting).toHaveBeenCalledTimes(3)
+        expect(container.querySelector("[data-room-audio]")).not.toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("shows the ended page instead of retrying when the meeting is over", async () => {
+      await render()
+      await join()
+      mocks.joinMeeting.mockRejectedValueOnce(new APIError("ended", 410, "meeting_ended"))
+      await click("lose-connection")
+      expect(container.textContent).toContain("lobby.ended")
+      expect(sessionStorage.getItem(resumeKey)).toBeNull()
+    })
+
+    it("returns to the lobby when a banned participant tries to rejoin", async () => {
+      await render()
+      await join()
+      mocks.joinMeeting.mockRejectedValueOnce(new APIError("banned", 403, "participant_banned"))
+      await click("lose-connection")
+      expect(mocks.joinMeeting).toHaveBeenCalledTimes(2)
+      expect(mocks.toastError).toHaveBeenCalledWith("room.rejoinFailed")
+      expect(container.querySelector(".join-now")).not.toBeNull()
+    })
+
+    it("stops looping when every fresh connection drops straight away", async () => {
+      await render()
+      await join()
+      for (let drop = 0; drop < 4; drop++) await click("lose-connection")
+      expect(mocks.joinMeeting).toHaveBeenCalledTimes(4)
+      expect(mocks.toastError).toHaveBeenCalledWith("room.rejoinFailed")
+      expect(container.querySelector(".join-now")).not.toBeNull()
+    })
+
+    it("rejoins without the lobby after the browser reloads or restores a discarded tab", async () => {
+      await render()
+      await join()
+      expect(JSON.parse(sessionStorage.getItem(resumeKey)!)).toMatchObject({ displayName: "Ali", micOn: true, cameraOn: false })
+      const saved = sessionStorage.getItem(resumeKey)!
+      act(() => root.unmount())
+      sessionStorage.setItem(resumeKey, saved)
+      root = createRoot(container)
+      await render()
+      expect(container.querySelector(".join-now")).toBeNull()
+      expect(mocks.joinMeeting).toHaveBeenCalledTimes(2)
+      expect(mocks.joinMeeting).toHaveBeenLastCalledWith("FIRST", "Ali", undefined)
+      expect(container.querySelector("[data-display-name]")?.getAttribute("data-display-name")).toBe("Ali")
+    })
+
+    it("forgets the call when the user leaves on purpose", async () => {
+      await render()
+      await join()
+      await click("leave")
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" })
+      act(() => root.unmount())
+      root = createRoot(container)
+      expect(sessionStorage.getItem(resumeKey)).toBeNull()
+    })
   })
 })

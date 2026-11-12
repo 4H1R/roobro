@@ -1,6 +1,6 @@
-import { ConnectionQualityIndicator, LiveKitRoom, ParticipantName, ParticipantPlaceholder, ParticipantTile, RoomAudioRenderer, useParticipants, useRoomContext, useTracks, VideoTrack } from "@livekit/components-react"
-import { DisconnectReason, RoomEvent, Track, setLogLevel, type RemoteParticipant, type Room } from "livekit-client"
-import { Activity, Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, Music2, MoreHorizontal, MoreVertical, PhoneOff, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
+import { ConnectionQualityIndicator, LiveKitRoom, ParticipantName, ParticipantPlaceholder, ParticipantTile, RoomAudioRenderer, StartAudio, useParticipants, useRoomContext, useTracks, VideoTrack, type TrackReferenceOrPlaceholder } from "@livekit/components-react"
+import { RoomEvent, Track, setLogLevel, type RemoteParticipant, type Room } from "livekit-client"
+import { Activity, Ban, Check, ChevronUp, Clock3, Copy, Info, Maximize2, MessageCircle, Mic, MicOff, Minimize2, MonitorUp, Music2, MoreHorizontal, MoreVertical, PhoneOff, PictureInPicture2, Send, ShieldCheck, SmilePlus, UserMinus, UserPlus, Users, Video, VideoOff, X } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -8,18 +8,22 @@ import { toast } from "sonner"
 
 import "@livekit/components-styles"
 
+import { MeetingPipView } from "@/components/meeting-pip-view"
 import { SharedPlaybackPanel } from "@/components/shared-playback-panel"
 import { ConnectionStatsPanel, connectionLabel } from "@/components/connection-stats-panel"
 import { useConnectionStats } from "@/hooks/use-connection-stats"
 import { BrandMark } from "@/components/brand-mark"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback"
+import { useMeetingPictureInPicture } from "@/hooks/use-meeting-picture-in-picture"
+import { useSpotlightTrack } from "@/hooks/use-spotlight-track"
 import type { PlaybackMedia } from "@/lib/shared-playback"
 import { getMeetingChat, meetingStorageKey, sendMeetingChat, setMeetingChatHistory, type JoinResult, type StoredChatMessage } from "@/lib/api"
 import { formatElapsedTime } from "@/lib/format-elapsed-time"
 import { mergeChatMessages } from "@/lib/chat-history"
 import { formatMessageTime } from "@/lib/format-message-time"
 import { linkifyText } from "@/lib/linkify-text"
+import { disconnectOutcome } from "@/lib/meeting-reconnect"
 import { playMessageReceivedSound, playMessageSentSound, playParticipantJoinedSound, playParticipantLeftSound } from "@/lib/meeting-sounds"
 
 // LiveKit emits recurring WebRTC stats at info level; keep production consoles quiet.
@@ -45,6 +49,8 @@ interface MeetingRoomProps {
   onLeave: () => void
   onEnd: () => void
   onFinished: () => void
+  onConnectionLost?: () => void
+  onMediaChange?: (media: { micOn: boolean; cameraOn: boolean }) => void
   onModerateParticipant?: (identity: string, ban: boolean) => Promise<void>
 }
 
@@ -85,6 +91,7 @@ function decodeReaction(payload: Uint8Array, participant: RemoteParticipant): Pi
 }
 
 export function MeetingRoom(props: MeetingRoomProps) {
+  const { t } = useTranslation()
   if (props.result.demo || !props.result.token || !props.result.server_url) return <DemoRoom {...props} />
   return (
     <LiveKitRoom
@@ -94,10 +101,16 @@ export function MeetingRoom(props: MeetingRoomProps) {
       video={props.cameraOn}
       className="meeting-room lk-room"
       data-lk-theme="default"
-      onDisconnected={(reason) => reason === DisconnectReason.ROOM_DELETED || reason === DisconnectReason.ROOM_CLOSED ? props.onFinished() : props.onLeave()}
+      onDisconnected={(reason) => {
+        const outcome = disconnectOutcome(reason)
+        if (outcome === "finished") props.onFinished()
+        else if (outcome === "rejoin" && props.onConnectionLost) props.onConnectionLost()
+        else props.onLeave()
+      }}
     >
       <LiveRoomShell {...props} />
       <RoomAudioRenderer />
+      <StartAudio className="meeting-start-audio" label={t("room.startAudio")} />
     </LiveKitRoom>
   )
 }
@@ -107,6 +120,7 @@ function LiveRoomShell(props: MeetingRoomProps) {
   const room = useRoomContext()
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }, { source: Track.Source.ScreenShare, withPlaceholder: false }], { onlySubscribed: false })
   const participants = useParticipants()
+  const spotlight = useSpotlightTrack(tracks, room.localParticipant?.identity)
   const shouldReduceMotion = useReducedMotion()
   const [focusedTrackKey, setFocusedTrackKey] = useState<string | null>(null)
 
@@ -124,6 +138,7 @@ function LiveRoomShell(props: MeetingRoomProps) {
         layout
         layoutId={key}
         key={key}
+        data-track-key={key}
         initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.94 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
@@ -189,7 +204,7 @@ function LiveRoomShell(props: MeetingRoomProps) {
     <div className="live-video-grid"><AnimatePresence initial={false}>{tracks.map((track) => renderTrack(track))}</AnimatePresence></div>
   )
 
-  return <RoomChrome {...props} room={room} participants={participants} stage={stage} live />
+  return <RoomChrome {...props} room={room} participants={participants} stage={stage} spotlight={spotlight} spotlightKey={spotlight ? getTrackKey(spotlight) : null} live />
 }
 
 function DemoRoom(props: MeetingRoomProps) {
@@ -246,12 +261,19 @@ function ChatMessages({ messages }: { messages: ChatMessage[] }) {
   )
 }
 
-function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: initialCamera, micOn: initialMic, onLeave, onEnd, onModerateParticipant, stage, live, room, participants = [] }: MeetingRoomProps & { stage: React.ReactNode; live: boolean; room?: Room; participants?: readonly RoomParticipant[] }) {
+function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: initialCamera, micOn: initialMic, onLeave, onEnd, onModerateParticipant, onMediaChange, stage, spotlight = null, spotlightKey = null, live, room, participants = [] }: MeetingRoomProps & { stage: React.ReactNode; spotlight?: TrackReferenceOrPlaceholder | null; spotlightKey?: string | null; live: boolean; room?: Room; participants?: readonly RoomParticipant[] }) {
   const { t, i18n } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
   const [cameraOn, setCameraOn] = useState(initialCamera)
   const [micOn, setMicOn] = useState(initialMic)
   const [screenSharing, setScreenSharing] = useState(room?.localParticipant?.isScreenShareEnabled ?? false)
+  const onMediaChangeRef = useRef(onMediaChange)
+  onMediaChangeRef.current = onMediaChange
+  useEffect(() => { onMediaChangeRef.current?.({ micOn, cameraOn }) }, [micOn, cameraOn])
+  const pictureInPicture = useMeetingPictureInPicture({
+    findFallbackVideo: () => spotlightKey ? document.querySelector<HTMLVideoElement>(`[data-track-key="${CSS.escape(spotlightKey)}"] video`) : null,
+    onFallbackUnavailable: () => toast(t("room.pictureInPictureNoVideo")),
+  })
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false)
   const [reactions, setReactions] = useState<MeetingReaction[]>([])
   const [panel, setPanel] = useState<"people" | "chat" | "details" | "connection" | "playback" | null>(null)
@@ -739,6 +761,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
             </div>
           </div>
           <button className={`desktop-secondary-action ${screenSharing ? "active" : ""}`} aria-label={t(screenSharing ? "room.stopPresenting" : "room.present")} aria-pressed={screenSharing} disabled={!room} onClick={() => void toggleScreenShare()} title={t(screenSharing ? "room.stopPresenting" : "room.present")}><MonitorUp /></button>
+          {pictureInPicture.supported && <button className={`desktop-secondary-action ${pictureInPicture.active ? "active" : ""}`} aria-label={t("room.pictureInPicture")} aria-pressed={pictureInPicture.active} onClick={() => void pictureInPicture.toggle()} title={t("room.pictureInPicture")}><PictureInPicture2 /></button>}
           <div className="reaction-control" ref={reactionPickerRef}>
             <button className={reactionPickerOpen ? "active" : ""} aria-label={t("room.reactions")} aria-haspopup="menu" aria-controls="reaction-picker" aria-expanded={reactionPickerOpen} onClick={() => { setMobileMenuOpen(false); setReactionPickerOpen((open) => !open) }} title={t("room.reactions")}><SmilePlus /></button>
             <AnimatePresence>
@@ -753,6 +776,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
             <AnimatePresence>
               {mobileMenuOpen && <motion.div id="mobile-actions-menu" className="mobile-actions-menu" role="menu" aria-orientation="vertical" initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }} transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}>
                 <button role="menuitem" disabled={!room} onClick={() => { setMobileMenuOpen(false); void toggleScreenShare() }}><MonitorUp /><span>{t(screenSharing ? "room.stopPresenting" : "room.present")}</span></button>
+                {pictureInPicture.supported && <button className={pictureInPicture.active ? "active" : ""} role="menuitem" onClick={() => { setMobileMenuOpen(false); void pictureInPicture.toggle() }}><PictureInPicture2 /><span>{t("room.pictureInPicture")}</span></button>}
                 <button role="menuitem" onClick={() => { setMobileMenuOpen(false); setDeviceMenu("audioinput") }}><Mic /><span>{t("room.chooseMicrophone")}</span></button>
                 <button role="menuitem" onClick={() => { setMobileMenuOpen(false); setDeviceMenu("videoinput") }}><Video /><span>{t("room.chooseCamera")}</span></button>
                 <button className={panel === "playback" ? "active" : ""} role="menuitem" onClick={() => openPanelFromMobileMenu("playback")}><Music2 /><span>{t("room.playback")}</span>{playbackLive && <i className="playback-live-dot" aria-label={t("playback.live")} />}</button>
@@ -774,6 +798,7 @@ function RoomChrome({ result, displayName, code, justCreated = false, cameraOn: 
       <AnimatePresence>
         {confirmLeave && <motion.div className="leave-overlay" role="presentation" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}><motion.div ref={leaveDialogRef} className="leave-dialog" role="dialog" aria-modal="true" aria-labelledby="leave-dialog-title" initial={shouldReduceMotion ? false : { opacity: 0, y: 22, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.97 }} transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}><motion.div className="leave-icon" initial={shouldReduceMotion ? false : { rotate: -10, scale: 0.8 }} animate={{ rotate: 0, scale: 1 }} transition={{ ...enterTransition, delay: shouldReduceMotion ? 0 : 0.08 }}><PhoneOff /></motion.div><h2 id="leave-dialog-title">{t("room.leaveTitle")}</h2><p>{t("room.leaveBody")}</p><div><button onClick={() => setConfirmLeave(false)}>{t("room.stay")}</button><button className="danger" onClick={onLeave}>{t("room.leaveNow")}</button>{result.role === "host" && <button className="danger-outline" onClick={onEnd}>{t("room.end")}</button>}</div></motion.div></motion.div>}
       </AnimatePresence>
+      {pictureInPicture.pipWindow && <MeetingPipView pipWindow={pictureInPicture.pipWindow} spotlight={spotlight} displayName={displayName} micOn={micOn} cameraOn={cameraOn} onToggleMicrophone={() => void toggleMicrophone()} onToggleCamera={() => void toggleCamera()} onLeave={onLeave} />}
     </motion.div>
   )
 }
